@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "PC3D.C": "cpp",
+        "optional": "cpp",
+        "system_error": "cpp"
+    }
+}
