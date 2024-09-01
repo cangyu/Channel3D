@@ -19,6 +19,12 @@ Foam::volVectorField U // Velocity@(n), Unit: m/s
     mesh_gas
 );
 
+Foam::volVectorField U_star // Provisional velocity@(n), Unit: m/s
+(
+    Foam::IOobject("U_star", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::NO_WRITE),
+    U
+);
+
 Foam::volVectorField U_next // Velocity@(m), Unit: m/s
 (
     Foam::IOobject("U_next", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::NO_WRITE),
@@ -73,13 +79,15 @@ Foam::volScalarField mu // Viscosity, Unit: kg/m/s
 Foam::volScalarField div_rhoU
 (
     Foam::IOobject("div_rhoU", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::NO_WRITE),
-    Foam::fvc::div(rhoU)
+    mesh_gas,
+    Foam::dimensionedScalar(Foam::dimDensity*Foam::dimVelocity/Foam::dimLength, Foam::Zero)
 );
 
 Foam::volVectorField grad_p
 (
     Foam::IOobject("grad_p", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::NO_WRITE),
-    Foam::fvc::grad(p)
+    mesh_gas,
+    Foam::dimensionedVector(Foam::dimPressure/Foam::dimLength, Foam::Zero)
 );
 
 /* Surface variables */

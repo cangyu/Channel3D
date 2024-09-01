@@ -19,7 +19,15 @@ solvers
 {
     rhoU_star
     {
-        solver         Diagonal;
+        solver          Diagonal;
+    }
+
+    U_star
+    {
+        solver          smoothSolver;
+        smoother        symGaussSeidel;
+        tolerance       1e-05;
+        relTol          0;
     }
 
     dp

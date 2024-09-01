@@ -27,13 +27,15 @@ gradSchemes
 
 divSchemes
 {
-    default              Gauss linear;
-    div(rhoUSn,U_next)   Gauss Minmod;
+    default              none;
+    div(rhoUSn)          Gauss linear;
+    div(rhoUSn_star)     Gauss linear;
+    div(rhoUSn,U_next)   Gauss vanLeer;
 }
 
 laplacianSchemes
 {
-    default         Gauss linear corrected;
+    default         Gauss linear orthogonal;
 }
 
 interpolationSchemes

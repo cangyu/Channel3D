@@ -76,15 +76,16 @@ int main(int argc, char *argv[])
 					/* Provisional momentum */
 					{
 						grad_p = Foam::fvc::grad(p_next);
-						rhoU_star = rhoU;
+						U_star = U;
 						Foam::fvVectorMatrix UEqn
 						(
-							Foam::fvm::ddt(rhoU_star) + Foam::fvc::div(rhoUSn, U_next) == -grad_p + Foam::fvc::laplacian(mu, U_next)
+							Foam::fvm::ddt(rho, U_star) + Foam::fvc::div(rhoUSn, U_next) == -grad_p + 0.5*(Foam::fvm::laplacian(mu, U_star)+Foam::fvc::laplacian(mu, U_next))
 						);
 						UEqn.solve();
 					}
 
 					/* Provisional mass flux */
+					rhoU_star = rho * U_star;
 					rhoUSn_star = Foam::fvc::interpolate(rhoU_star) & mesh_gas.Sf();
 					Foam::surfaceScalarField grad_p_f_compact(Foam::fvc::snGrad(p_next) * mesh_gas.magSf());
 					Foam::surfaceScalarField grad_p_f_mean(Foam::fvc::interpolate(grad_p) & mesh_gas.Sf());
@@ -99,7 +100,6 @@ int main(int argc, char *argv[])
 					(
 						dt * Foam::fvm::laplacian(dp) == Foam::fvc::div(rhoUSn_star)
 					);
-					dpEqn.setReference(0, 0.0);
 					dpEqn.solve();
 
 					/* Update */
