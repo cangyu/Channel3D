@@ -29,7 +29,7 @@ deltaT          5e-6;
 
 writeControl    timeStep;
 
-writeInterval   200;
+writeInterval   20;
 
 purgeWrite      0;
 

@@ -71,6 +71,16 @@ int main(int argc, char *argv[])
 			{
 				Foam::Info << "m=" << m << Foam::endl;
 
+				/* Update the position of immersed boundary */
+				const Foam::vector c0(0.5, 0.5, 0.5);
+				const Foam::scalar r = 0.1;
+				for (int i = 0; i < mesh_gas.nCells(); i++)
+				{
+					const auto &c = mesh_gas.C()[i];
+					if (Foam::mag(c-c0) < r)
+						cMask[i] = 0.0;
+				}
+
 				/* Predictor */
 				{
 					/* Provisional momentum */
@@ -83,6 +93,8 @@ int main(int argc, char *argv[])
 						);
 						UEqn.solve();
 					}
+
+					U_star *= cMask;
 
 					/* Provisional mass flux */
 					rhoU_star = rho * U_star;
