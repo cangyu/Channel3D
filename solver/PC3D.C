@@ -100,6 +100,24 @@ Foam::scalar cellNum(const Foam::vectorList &v, const Foam::vector &c)
 	}
 }
 
+struct ibExtStencil
+{
+	Foam::label my_cI;
+	Foam::label my_proc;
+	Foam::label nAdjC;
+	Foam::labelList proc;
+	Foam::labelList cI;
+
+	void reset()
+	{
+		my_cI = 0;
+		my_proc = 0;
+		nAdjC = 0;
+		proc.clear();
+		cI.clear();
+	}
+};
+
 int main(int argc, char *argv[])
 {
 	#include "setRootCase.H"
@@ -114,6 +132,8 @@ int main(int argc, char *argv[])
 	/* compressibleCreatePhi.H */
 	rhoUSn = Foam::fvc::interpolate(rhoU) & mesh_gas.Sf();
 	update_boundaryField(mesh_gas, rho, U, rhoUSn);
+
+	Foam::List<ibExtStencil> ibInterpInfo(mesh_gas.nCells());
 
 	/* Classify mesh cells */
 	{
@@ -149,6 +169,17 @@ int main(int argc, char *argv[])
 				cIbMask[i] = 1.0;
 			else
 				cIbMask[i] = 0.0;
+		}
+
+		for (int i = 0; i < mesh_gas.nCells(); i++)
+		{
+			auto &e = ibInterpInfo[i];
+			e.my_cI = i;
+			e.my_proc = Foam::Pstream::myProcNo();
+			for (int j = 0; j < mesh_gas.cellCells()[i].size(); j++)
+			{
+				
+			}
 		}
 	}
 
