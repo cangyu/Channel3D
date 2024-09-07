@@ -75,16 +75,23 @@ Foam::volScalarField mu // Viscosity, Unit: kg/m/s
     "zeroGradient"
 );
 
-Foam::volScalarField cMask
+Foam::volScalarField cMarker
 (
-    Foam::IOobject("cMask", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
+    Foam::IOobject("cMarker", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
+    mesh_gas,
+    Foam::dimensionedScalar(Foam::dimless, 0.0)
+);
+
+Foam::volScalarField cIbMask
+(
+    Foam::IOobject("cIbMask", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
     mesh_gas,
     Foam::dimensionedScalar(Foam::dimless, 1.0)
 );
 
-Foam::surfaceScalarField fMask
+Foam::surfaceScalarField fIbMask
 (
-    Foam::IOobject("fMask", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
+    Foam::IOobject("fIbMask", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
     mesh_gas,
     Foam::dimensionedScalar(Foam::dimless, 1.0)
 );
