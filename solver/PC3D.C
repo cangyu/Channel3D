@@ -176,9 +176,24 @@ int main(int argc, char *argv[])
 			auto &e = ibInterpInfo[i];
 			e.my_cI = i;
 			e.my_proc = Foam::Pstream::myProcNo();
-			for (int j = 0; j < mesh_gas.cellCells()[i].size(); j++)
+
+			// Only check cells represents the immersed boundary.
+			if (!isEqual(cMarker[i], cIB))
+				continue;
+
+			const auto &adjCell = mesh_gas.cellCells()[i];
+			const auto &encFace = mesh_gas.cells()[i];
+			const auto &incNode = mesh_gas.cellPoints()[i];
+
+			Foam::labelHashSet extCell;
+
+			for (int j = 0; j < encFace.size(); j++)
 			{
-				
+				const auto fI = encFace[j];
+				if (mesh_gas.isInternalFace(fI))
+				{
+
+				}
 			}
 		}
 	}
