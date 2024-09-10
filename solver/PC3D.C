@@ -100,6 +100,12 @@ Foam::scalar cellNum(const Foam::vectorList &v, const Foam::vector &c)
 	}
 }
 
+struct adjStencil
+{
+	Foam::labelList procNo;
+	Foam::labelList cI;
+};
+
 struct ibExtStencil
 {
 	Foam::label my_cI;
@@ -132,6 +138,56 @@ int main(int argc, char *argv[])
 	/* compressibleCreatePhi.H */
 	rhoUSn = Foam::fvc::interpolate(rhoU) & mesh_gas.Sf();
 	update_boundaryField(mesh_gas, rho, U, rhoUSn);
+
+	// Foam::Pout << "Size of faceNeighbour: " << mesh_gas.faceNeighbour().size() << Foam::endl;
+	// Foam::Pout << "Size of faceOwner: " << mesh_gas.faceOwner().size() << Foam::endl;
+	// Foam::Pout << "Size of neighbour: " << mesh_gas.neighbour().size() << Foam::endl;
+	// Foam::Pout << "Size of owner: " << mesh_gas.owner().size() << Foam::endl;
+
+	// for(int pI = 0; pI < bMesh_gas.size(); pI++)
+	// {
+	// 	const auto& curPatch = bMesh_gas[pI];
+	// 	Foam::Pout << "patch " << curPatch.name() << ": processorPolyPatch check: " << Foam::isA<Foam::processorPolyPatch>(curPatch) << Foam::endl;
+	// }
+
+	/* Record adjacent cells of each cell */
+	Foam::List<adjStencil> adjInfo(mesh_gas.nCells());
+	for (int i = 0; i < mesh_gas.nCells(); i++)
+	{
+		auto &e = adjInfo[i];
+
+		const auto &adjCell = mesh_gas.cellCells()[i];
+		const auto &encFace = mesh_gas.cells()[i];
+		const auto &incNode = mesh_gas.cellPoints()[i];
+
+		bool onParBdry = false;
+		for (int j = 0; j < encFace.size(); j++)
+		{
+			const auto fI = encFace[j];
+			if (mesh_gas.isInternalFace(fI))
+			{
+				e.procNo.append(Foam::Pstream::myProcNo());
+				e.cI.append(mesh_gas.faceNeighbour()[fI]);
+			}
+			else
+			{
+				const auto pI = bMesh_gas.whichPatch(fI); // Boundary patch index
+				const auto &curPatch = bMesh_gas[pI];
+				const auto fI_loc = curPatch.whichFace(fI); // Local boundary face index
+				if (Foam::isA<Foam::processorPolyPatch>(curPatch))
+				{
+					const auto &procPatch = dynamic_cast<const Foam::processorPolyPatch &>(curPatch);
+					e.procNo.append(procPatch.neighbProcNo());
+					onParBdry = true;
+				}
+			}
+		}
+
+		if (onParBdry)
+		{
+			Foam::Pout << "Cell" << i << ": " << e.procNo << Foam::endl;
+		}
+	}
 
 	Foam::List<ibExtStencil> ibInterpInfo(mesh_gas.nCells());
 
@@ -180,21 +236,6 @@ int main(int argc, char *argv[])
 			// Only check cells represents the immersed boundary.
 			if (!isEqual(cMarker[i], cIB))
 				continue;
-
-			const auto &adjCell = mesh_gas.cellCells()[i];
-			const auto &encFace = mesh_gas.cells()[i];
-			const auto &incNode = mesh_gas.cellPoints()[i];
-
-			Foam::labelHashSet extCell;
-
-			for (int j = 0; j < encFace.size(); j++)
-			{
-				const auto fI = encFace[j];
-				if (mesh_gas.isInternalFace(fI))
-				{
-
-				}
-			}
 		}
 	}
 

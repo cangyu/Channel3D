@@ -4,6 +4,8 @@ Foam::fvMesh mesh_gas
     Foam::IOobject("gas", runTime.timeName(), runTime, Foam::IOobject::MUST_READ)
 );
 
+const auto& bMesh_gas = mesh_gas.boundaryMesh();
+
 Foam::globalMeshData meshInfo_gas(mesh_gas);
 
 /* Volume variables of gas-phase */
