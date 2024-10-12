@@ -54,6 +54,10 @@ const Foam::scalar Re = 100.0;  // Reynolds number
 const Foam::scalar p0 = one_atm;
 const Foam::scalar T0 = 300.0;
 
+const Foam::scalar rb = 10 * mm2m;
+
+const double h = 500 * um2m / 32;
+
 /* Properties of the solid material */
 const double rho_AP = 1950.0;          // Density of AP, Unit: kg/m^3
 const double rho_HTPB = 920.0;         // Density of HTPB, Unit: kg/m^3
@@ -262,7 +266,7 @@ int main(int argc, char *argv[])
 					);
 					for (int i=0; i < mesh_gas.nCells(); i++)
 					{
-						if (cIbMarker[i] < gasNum)
+						if (cIbMarker[i] < cFluid)
 							dpEqn.source()[i] = 0.0;
 					}
 					dpEqn.solve();
@@ -326,13 +330,14 @@ int main(int argc, char *argv[])
 
 				for (int i = 0; i < mesh_gas.nCells(); i++)
 				{
-					if (isEqual(cIbMarker[i], boundaryNum))
+					if (isEqual(cIbMarker[i], cIB))
 					{
-						S_mass[i] = rho_AP * rb / user.h;
-						const auto rho_g = user.p0 / Rg.value() / 800.0;
+						S_mass[i] = rho_AP * rb / h;
+						const auto rho_g = p0 / Rg.value() / 800.0;
 						const auto u_g = rho_AP * rb / rho_g;
 						S_momentum[i] = S_mass[i] * Foam::vector(0.0, 0.0, u_g);
 						S_temperature[i] = S_mass[i] * 800.0;
+					}
 				}
 			}
 		}
