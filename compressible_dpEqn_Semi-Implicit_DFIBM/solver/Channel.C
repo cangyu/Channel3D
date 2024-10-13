@@ -156,6 +156,41 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, double 
 	Foam::reduce(maxVal, Foam::maxOp<Foam::scalar>());
 }
 
+bool pnt_inSolid(const Foam::vector &c)
+{
+	const Foam::vector cylinder_c0(0, 0, 0);
+	const Foam::scalar cylinder_r = 0.5;
+
+	Foam::vector d = c-cylinder_c0;
+	return Foam::mag(d) < cylinder_r;
+}
+
+bool cell_isIntersected(const Foam::vectorList &v)
+{
+	bool flag = pnt_inSolid(v[0]);
+	for (int i = 1; i < v.size(); i++)
+	{
+		if (pnt_inSolid(v[i]) != flag)
+			return true;
+	}
+	return false;
+}
+
+Foam::scalar cellNum(const Foam::vectorList &v, const Foam::vector &c)
+{
+	if (pnt_inSolid(c))
+	{
+		if (cell_isIntersected(v))
+			return cIB;
+		else
+			return cSolid;
+	}
+	else
+	{
+		return cFluid;
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	#include "setRootCase.H"
@@ -195,6 +230,55 @@ int main(int argc, char *argv[])
 	/* compressibleCreatePhi.H */
 	rhoUSn = Foam::fvc::interpolate(rho*U) & mesh_gas.Sf();
 	setBdryVal(mesh_gas, rho, U, rhoUSn);
+
+	/* Classify mesh cells */
+	{
+		for (int i = 0; i < mesh_gas.nCells(); i++)
+		{
+			const auto &c = mesh_gas.C()[i];
+
+			const auto &cP = mesh_gas.cellPoints()[i];
+			Foam::vectorList p(cP.size());
+			for (int j = 0; j < p.size(); j++)
+				p[j] = mesh_gas.points()[cP[j]];
+
+			cIbMarker[i] = cellNum(p, c);
+		}
+
+		for (int i = 0; i < mesh_gas.nCells(); i++)
+		{
+			if (isEqual(cIbMarker[i], cSolid))
+			{
+				const auto &cC = mesh_gas.cellCells()[i];
+				for (int j = 0; j < cC.size(); j++)
+				{
+					const auto adjCI = cC[j];
+					if (isEqual(cIbMarker[adjCI], cFluid))
+						cIbMarker[adjCI] = cIB;
+				}
+			}
+		}
+
+		for (int i = 0; i < mesh_gas.nCells(); i++)
+		{
+			if (isEqual(cIbMarker[i], cIB))
+			{
+				const auto &cC = mesh_gas.cellCells()[i];
+				bool adjToSolid = false;
+				for (int j = 0; j < cC.size(); j++)
+				{
+					const auto adjCI = cC[j];
+					if (isEqual(cIbMarker[adjCI], cSolid))
+					{
+						adjToSolid = true;
+						break;
+					}
+				}
+				if (!adjToSolid)
+					cIbMarker[i] = cFluid;
+			}
+		}
+	}
 
 	while(runTime.loop())
 	{
