@@ -51,10 +51,10 @@ const Foam::scalar Pr = 1.0;    // Prandtl number
 const Foam::scalar Le = 1.0;    // Lewis number
 const Foam::scalar Re = 100.0;  // Reynolds number
 
-const Foam::scalar p0 = one_atm;
+const Foam::scalar p0 = 2.07 * one_mpa;
 const Foam::scalar T0 = 300.0;
 
-const Foam::scalar rb = 10 * mm2m;
+const Foam::scalar rb = 2 * mm2m;
 
 const double h = 500 * um2m / 32;
 
@@ -158,11 +158,7 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, double 
 
 bool pnt_inSolid(const Foam::vector &c)
 {
-	const Foam::vector cylinder_c0(0, 0, 0);
-	const Foam::scalar cylinder_r = 0.5;
-
-	Foam::vector d = c-cylinder_c0;
-	return Foam::mag(d) < cylinder_r;
+	return c.z() < 0.25e-3;
 }
 
 bool cell_isIntersected(const Foam::vectorList &v)
@@ -280,6 +276,25 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* Update the source terms in gas-phase @(n+1) by the Immersed Boundary Method */
+	{
+		S_mass = Foam::Zero;
+		S_momentum = Foam::Zero;
+		S_temperature = Foam::Zero;
+
+		for (int i = 0; i < mesh_gas.nCells(); i++)
+		{
+			if (isEqual(cIbMarker[i], cIB))
+			{
+				S_mass[i] = rho_AP * rb / h;
+				const auto rho_g = p0 / Rg.value() / 800.0;
+				const auto u_g = rho_AP * rb / rho_g;
+				S_momentum[i] = S_mass[i] * Foam::vector(0.0, 0.0, u_g);
+				S_temperature[i] = S_mass[i] * 800.0;
+			}
+		}
+	}
+
 	while(runTime.loop())
 	{
 		const Foam::dimensionedScalar dt(Foam::dimTime, runTime.deltaTValue());
@@ -348,11 +363,11 @@ int main(int argc, char *argv[])
 					(
 						Foam::fvm::Sp(1.0/(dt * Rg * T), dp) - dt * Foam::fvm::laplacian(dp) == -(Foam::fvc::div(rhoUSn) + Foam::fvc::ddt(rho) - S_mass)
 					);
-					for (int i=0; i < mesh_gas.nCells(); i++)
-					{
-						if (cIbMarker[i] < cFluid)
-							dpEqn.source()[i] = 0.0;
-					}
+					// for (int i=0; i < mesh_gas.nCells(); i++)
+					// {
+					// 	if (cIbMarker[i] < cFluid)
+					// 		dpEqn.source()[i] = 0.0;
+					// }
 					dpEqn.solve();
 
 					/* Update */
@@ -404,25 +419,6 @@ int main(int argc, char *argv[])
 
 				diagnose(mesh_gas, meshInfo_gas, Foam::fvc::div(rhoUSn), eps_1, eps_2, eps_inf);
 				Foam::Info << "||div(rhoU)||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
-			}
-
-			/* Update the source terms in gas-phase @(n+1) by the Immersed Boundary Method */
-			{
-				S_mass = Foam::Zero;
-				S_momentum = Foam::Zero;
-				S_temperature = Foam::Zero;
-
-				for (int i = 0; i < mesh_gas.nCells(); i++)
-				{
-					if (isEqual(cIbMarker[i], cIB))
-					{
-						S_mass[i] = rho_AP * rb / h;
-						const auto rho_g = p0 / Rg.value() / 800.0;
-						const auto u_g = rho_AP * rb / rho_g;
-						S_momentum[i] = S_mass[i] * Foam::vector(0.0, 0.0, u_g);
-						S_temperature[i] = S_mass[i] * 800.0;
-					}
-				}
 			}
 		}
 	}
