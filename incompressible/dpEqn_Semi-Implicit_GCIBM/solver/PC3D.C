@@ -17,11 +17,9 @@
 #include "tensorFieldIOField.H"
 #include "tensorList.H"
 #include "pointFields.H"
-
 #include "centredCECCellToCellStencilObject.H"
 #include "centredCFCCellToCellStencilObject.H"
 #include "centredCPCCellToCellStencilObject.H"
-
 #include <iostream>
 #include <fstream>
 #include <vector>
@@ -57,10 +55,8 @@ const Foam::scalar Re = 100.0;  // Reynolds number
 
 /* Classification of gas-phase cells */
 const Foam::scalar cFluid = 1.0;
-const Foam::scalar cIB = 0.0;
+const Foam::scalar cGhost = 0.0;
 const Foam::scalar cSolid = -1.0;
-
-const Foam::scalar h = 1.0 / 32;
 
 void update_boundaryField(const Foam::fvMesh &mesh, const Foam::volScalarField &src1, const Foam::volVectorField &src2, Foam::surfaceScalarField &dst)
 {
@@ -75,6 +71,8 @@ void update_boundaryField(const Foam::fvMesh &mesh, const Foam::volScalarField &
 			patch_dst[fI] = patch_val1[fI] * patch_val2[fI] & patch_Sn[fI];
 	}
 }
+
+const Foam::scalar h = 1.0 / 32;
 
 bool pnt_inSolid(const Foam::vector &c)
 {
@@ -108,86 +106,6 @@ Foam::scalar cellNum(const Foam::vectorList &v, const Foam::vector &c)
 	}
 }
 
-struct adjStencil
-{
-	Foam::labelList procNo;
-	Foam::labelList cI;
-};
-
-struct ibExtStencil
-{
-	Foam::label my_cI;
-	Foam::label my_proc;
-	Foam::label nAdjC;
-	Foam::labelList proc;
-	Foam::labelList cI;
-
-	void reset()
-	{
-		my_cI = 0;
-		my_proc = 0;
-		nAdjC = 0;
-		proc.clear();
-		cI.clear();
-	}
-};
-
-void writeStencilOBJ
-(
-    const Foam::fileName& fName,
-    const Foam::point& fc,
-    const Foam::List<Foam::point>& stencilCc
-)
-{
-    Foam::OFstream str(fName);
-    Foam::label vertI = 0;
-
-    Foam::meshTools::writeOBJ(str, fc);
-    vertI++;
-
-    forAll(stencilCc, i)
-    {
-        Foam::meshTools::writeOBJ(str, stencilCc[i]);
-        vertI++;
-        str << "l 1 " << vertI << Foam::nl;
-    }
-}
-
-void writeStencilStats(const Foam::labelListList& stencil)
-{
-	using namespace Foam;
-
-    label sumSize = 0;
-    label nSum = 0;
-    label minSize = labelMax;
-    label maxSize = labelMin;
-
-    forAll(stencil, i)
-    {
-        const labelList& sCells = stencil[i];
-
-        if (sCells.size() > 0)
-        {
-            sumSize += sCells.size();
-            nSum++;
-            minSize = min(minSize, sCells.size());
-            maxSize = max(maxSize, sCells.size());
-        }
-    }
-    reduce(sumSize, sumOp<label>());
-    reduce(nSum, sumOp<label>());
-    sumSize /= nSum;
-
-    reduce(minSize, minOp<label>());
-    reduce(maxSize, maxOp<label>());
-
-    Info<< "Stencil size :" << nl
-        << "    average : " << sumSize << nl
-        << "    min     : " << minSize << nl
-        << "    max     : " << maxSize << nl
-        << endl;
-}
-
 int main(int argc, char *argv[])
 {
 	#include "setRootCase.H"
@@ -196,201 +114,56 @@ int main(int argc, char *argv[])
 	/* Load meshes and create variables */
 	#include "createMeshAndField.H"
 
+	/* compressibleCreatePhi.H */
+	rhoUSn = Foam::fvc::interpolate(rhoU) & mesh_gas.Sf();
+	update_boundaryField(mesh_gas, rho, U, rhoUSn);
+
 	/* Initialize */
-	#include "init.H"
+	{
+		for (int i = 0; i < mesh_gas.nCells(); i++)
+		{
+			p[i] = 0.0;
+			U[i].x() = 0.0;
+			U[i].y() = 0.0;
+			U[i].z() = 0.0;
+			rho[i] = 1.0;
+			rhoU[i] = rho[i] * U[i];
+			mu[i] = 1.0 / Re;
+		}
+		p.correctBoundaryConditions();
+		U.correctBoundaryConditions();
+		rho.correctBoundaryConditions();
+		rhoU.correctBoundaryConditions();
+		mu.correctBoundaryConditions();
+
+		U_next = U;
+		p_next = p;
+		rhoU_next = rhoU;
+
+		U_next.correctBoundaryConditions();
+		p_next.correctBoundaryConditions();
+		rhoU_next.correctBoundaryConditions();
+	}
 
 	// Force calculation of extended edge addressing
 	{
 		const Foam::labelListList& edgeFaces = mesh_gas.edgeFaces();
 		const Foam::labelListList& edgeCells = mesh_gas.edgeCells();
 		const Foam::labelListList& pointCells = mesh_gas.pointCells();
-		// Foam::Info<< "dummy:" << edgeFaces.size() + edgeCells.size() + pointCells.size() << Foam::endl;
 	}
 
-	/* compressibleCreatePhi.H */
-	rhoUSn = Foam::fvc::interpolate(rhoU) & mesh_gas.Sf();
-	update_boundaryField(mesh_gas, rho, U, rhoUSn);
-
-	// Foam::Pout << "Size of faceNeighbour: " << mesh_gas.faceNeighbour().size() << Foam::endl;
-	// Foam::Pout << "Size of faceOwner: " << mesh_gas.faceOwner().size() << Foam::endl;
-	// Foam::Pout << "Size of neighbour: " << mesh_gas.neighbour().size() << Foam::endl;
-	// Foam::Pout << "Size of owner: " << mesh_gas.owner().size() << Foam::endl;
-
-	// for(int pI = 0; pI < bMesh_gas.size(); pI++)
-	// {
-	// 	const auto& curPatch = bMesh_gas[pI];
-	// 	Foam::Pout << "patch " << curPatch.name() << ": processorPolyPatch check: " << Foam::isA<Foam::processorPolyPatch>(curPatch) << Foam::endl;
-	// }
-
+	// Extended stencil, processor-boundaries are dealt with automatically
 	const Foam::extendedCentredCellToCellStencil& addressing = Foam::centredCPCCellToCellStencilObject::New(mesh_gas);
 
-	Foam::Info<< "cellCellCell:" << Foam::endl;
-	writeStencilStats(addressing.stencil());
-
-	// Collect stencil cell centres
-	Foam::List<Foam::List<Foam::point>> stencilPoints(mesh_gas.nCells());
-	addressing.collectData(mesh_gas.C(), stencilPoints);
-
-	for (int i = 0; i < mesh_gas.nCells(); i++)
-	{
-		const auto &C = mesh_gas.cellCentres()[i];
-		const auto &C_ADJ = stencilPoints[i];
-
-		const Foam::scalar C_dx = C.x() / h;
-		const Foam::scalar C_dy = C.y() / h;
-		const Foam::scalar C_dz = C.z() / h;
-
-		const Foam::label C_dI = int(C.x() / h + 0.5);
-		const Foam::label C_dJ = int(C.y() / h + 0.5);
-		const Foam::label C_dK = int(C.z() / h + 0.5);
-
-		const Foam::fileName fn = runTime.path()/"centredCPCCell" + Foam::name(i) + ".obj";
-		writeStencilOBJ(fn, C, C_ADJ);
-
-		std::ofstream fout(fn, std::ios_base::app);
-		if (fout.fail())
-			return -1;
-
-		fout << "Cell" << i << ": (x, y, z)/h=(" << C_dx << ", " << C_dy << ", " << C_dz << "), (i, j, k)=(" << C_dI << ", " << C_dJ << ", " << C_dK << "), " << addressing.stencil()[i].size() << ", " << mesh_gas.cellCells()[i].size() << std::endl;
-
-		for (int j = 0; j < addressing.stencil()[i].size(); j++)
-		{
-			const auto &curCADJ = C_ADJ[j];
-			const auto D = curCADJ - C;
-			const Foam::scalar dx = D.x() / h;
-			const Foam::scalar dy = D.y() / h;
-			const Foam::scalar dz = D.z() / h;
+	// Initialize stencil storage
+	Foam::List<Foam::vectorList> sten_coord(mesh_gas.nCells());
+	Foam::List<Foam::scalarList> sten_ib(mesh_gas.nCells());
+	Foam::List<Foam::scalarList> sten_val(mesh_gas.nCells());
+	addressing.collectData(mesh_gas.C(), sten_coord);
+	addressing.collectData(cIbMarker, sten_ib);
+	addressing.collectData(T, sten_val);
 
 
-
-			fout << "extSten" << j << ": " << addressing.stencil()[i][j] << ", (dx, dy, dz)/h=(" << dx << ", " << dy << ", " << dz << ")" << std::endl;
-		}
-		fout.close();
-
-		nADJ[i] = addressing.stencil()[i].size();
-		nADJ2[i] = mesh_gas.cellCells()[i].size();
-
-		bool onPhyBdry = false, onParBdry = false;
-		for (int j = 0; j < mesh_gas.cells()[i].size(); j++)
-		{
-			const auto fI = mesh_gas.cells()[i][j];
-			if (!mesh_gas.isInternalFace(fI))
-			{
-				const auto pI = bMesh_gas.whichPatch(fI); // Boundary patch index
-				const auto &curPatch = bMesh_gas[pI];
-				const auto fI_loc = curPatch.whichFace(fI); // Local boundary face index
-				if (Foam::isA<Foam::processorPolyPatch>(curPatch))
-					onParBdry = true;
-				else
-					onPhyBdry = true;
-			}
-		}
-
-		if (onPhyBdry && onParBdry)
-		{
-			Foam::Pout << "Cell" << i << ": adjacent to both physical and parallel patch: " << addressing.stencil()[i].size();
-			for (int j = 0; j < addressing.stencil()[i].size(); j++)
-			{
-				const auto cI = addressing.stencil()[i][j];
-				if (cI >= mesh_gas.nCells())
-				{
-					Foam::Pout << " | " << cI;
-				}
-			}
-			Foam::Pout << Foam::endl;
-		}
-	}
-
-	return 0;
-
-	/* Record adjacent cells of each cell */
-	Foam::List<adjStencil> adjInfo(mesh_gas.nCells());
-	for (int i = 0; i < mesh_gas.nCells(); i++)
-	{
-		auto &e = adjInfo[i];
-
-		const auto &adjCell = mesh_gas.cellCells()[i];
-		const auto &encFace = mesh_gas.cells()[i];
-		const auto &incNode = mesh_gas.cellPoints()[i];
-
-		bool onParBdry = false;
-		for (int j = 0; j < encFace.size(); j++)
-		{
-			const auto fI = encFace[j];
-			if (mesh_gas.isInternalFace(fI))
-			{
-				e.procNo.append(Foam::Pstream::myProcNo());
-				e.cI.append(mesh_gas.faceNeighbour()[fI]);
-			}
-			else
-			{
-				const auto pI = bMesh_gas.whichPatch(fI); // Boundary patch index
-				const auto &curPatch = bMesh_gas[pI];
-				const auto fI_loc = curPatch.whichFace(fI); // Local boundary face index
-				if (Foam::isA<Foam::processorPolyPatch>(curPatch))
-				{
-					const auto &procPatch = dynamic_cast<const Foam::processorPolyPatch &>(curPatch);
-					e.procNo.append(procPatch.neighbProcNo());
-					onParBdry = true;
-				}
-			}
-		}
-
-		if (onParBdry)
-		{
-			Foam::Pout << "Cell" << i << ": " << e.procNo << Foam::endl;
-		}
-	}
-
-	Foam::List<ibExtStencil> ibInterpInfo(mesh_gas.nCells());
-
-	/* Classify mesh cells */
-	{
-		for (int i = 0; i < mesh_gas.nCells(); i++)
-		{
-			const auto &c = mesh_gas.C()[i];
-
-			const auto &cP = mesh_gas.cellPoints()[i];
-			Foam::vectorList p(cP.size());
-			for (int j = 0; j < p.size(); j++)
-				p[j] = mesh_gas.points()[cP[j]];
-
-			cMarker[i] = cellNum(p, c);
-		}
-
-		for (int i = 0; i < mesh_gas.nCells(); i++)
-		{
-			if (isEqual(cMarker[i], cSolid))
-			{
-				const auto &cC = mesh_gas.cellCells()[i];
-				for (int j = 0; j < cC.size(); j++)
-				{
-					const auto adjCI = cC[j];
-					if (isEqual(cMarker[adjCI], cFluid))
-						cMarker[adjCI] = cIB;
-				}
-			}
-		}
-
-		for (int i = 0; i < mesh_gas.nCells(); i++)
-		{
-			if (cMarker[i] > 0)
-				cIbMask[i] = 1.0;
-			else
-				cIbMask[i] = 0.0;
-		}
-
-		for (int i = 0; i < mesh_gas.nCells(); i++)
-		{
-			auto &e = ibInterpInfo[i];
-			e.my_cI = i;
-			e.my_proc = Foam::Pstream::myProcNo();
-
-			// Only check cells represents the immersed boundary.
-			if (!isEqual(cMarker[i], cIB))
-				continue;
-		}
-	}
 
 	while(runTime.loop())
 	{

@@ -91,21 +91,6 @@ Foam::volScalarField cIbMask
     Foam::dimensionedScalar(Foam::dimless, 1.0)
 );
 
-Foam::volScalarField nADJ
-(
-    Foam::IOobject("nADJ", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
-    mesh_gas,
-    Foam::dimensionedScalar(Foam::dimless, 0.0)
-);
-
-
-Foam::volScalarField nADJ2
-(
-    Foam::IOobject("nADJ2", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
-    mesh_gas,
-    Foam::dimensionedScalar(Foam::dimless, 0.0)
-);
-
 /* Gradients */
 Foam::volScalarField div_rhoU
 (
