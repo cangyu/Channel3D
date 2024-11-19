@@ -29,11 +29,6 @@
 #include <limits>
 #include <string>
 
-bool isEqual(double x, double y)
-{
-  return std::abs(x-y) <= 1e-6 * std::abs(x);
-}
-
 /* Constants */
 const Foam::scalar s2ns = 1e9, ns2s = 1.0/s2ns;
 const Foam::scalar s2us = 1e6, us2s = 1.0/s2us;
@@ -58,6 +53,20 @@ const Foam::scalar cFluid = 1.0;
 const Foam::scalar cGhost = 0.0;
 const Foam::scalar cSolid = -1.0;
 
+inline bool isEqual(double x, double y)
+{
+	return std::abs(x-y) <= 1e-6 * std::abs(x);
+}
+
+const Foam::scalar h = 1.0 / 32;
+
+void xyz2ijk(double x, double y, double z, int &i, int &j, int &k)
+{
+    i = int(x / h + 0.5);
+    j = int(y / h + 0.5);
+    k = int(z / h + 0.5);
+}
+
 void update_boundaryField(const Foam::fvMesh &mesh, const Foam::volScalarField &src1, const Foam::volVectorField &src2, Foam::surfaceScalarField &dst)
 {
 	for (int pI = 0; pI < mesh.boundary().size(); pI++)
@@ -72,38 +81,352 @@ void update_boundaryField(const Foam::fvMesh &mesh, const Foam::volScalarField &
 	}
 }
 
-const Foam::scalar h = 1.0 / 32;
-
-bool pnt_inSolid(const Foam::vector &c)
+double distToSurf(const Foam::vector &c)
 {
 	const Foam::vector c0(0.5, 0.5, 0.5);
 	const Foam::scalar r = 0.15;
-
-	return Foam::mag(c-c0) < r;
+    return Foam::mag(c-c0) - r;
 }
 
-bool cell_isIntersected(const Foam::vectorList &v)
+bool pntInFluid(const Foam::vector &c)
 {
-	bool flag = pnt_inSolid(v[0]);
-	for (int i = 1; i < v.size(); i++)
-	{
-		if (pnt_inSolid(v[i]) != flag)
-			return true;
-	}
-	return false;
+    return distToSurf(c) > 0.0;
+}
+
+bool pntInSolid(const Foam::vector &c)
+{
+    return !pntInFluid(c);
+}
+
+bool pntNearSurf(const Foam::vector &c)
+{
+    const auto d = distToSurf(c);
+    return std::abs(d) < 0.1 * h;
+}
+
+bool cellIsIntersected(const Foam::vectorList &v)
+{
+    bool flag = pntInSolid(v[0]);
+    for (int i = 1; i < v.size(); i++)
+    {
+        if (pntInSolid(v[i]) != flag)
+            return true;
+    }
+    return false;
 }
 
 Foam::scalar cellNum(const Foam::vectorList &v, const Foam::vector &c)
 {
-	if (pnt_inSolid(c))
-		return cSolid;
-	else
-	{
-		if (cell_isIntersected(v))
-			return cIB;
-		else
-			return cFluid;
-	}
+    if (pntInFluid(c))
+        return cFluid;
+    else
+    {
+        if (cellIsIntersected(v))
+            return cGhost;
+        else
+        {
+            bool awayFromSruf = true;
+            for (int i = 0; i < v.size(); i++)
+            {
+                if (pntNearSurf(v[i]))
+                {
+                    awayFromSruf = false;
+                    break;
+                }
+            }
+
+            if (awayFromSruf)
+                return cSolid;
+            else
+                return cGhost;
+        }
+    }
+}
+
+void identifyIBCell(const Foam::fvMesh &mesh, Foam::volScalarField &marker)
+{
+    int nSolid = 0, nGhost = 0, nFluid = 0;
+    for (int i = 0; i < mesh.nCells(); i++)
+    {
+        const auto &c = mesh.C()[i];
+
+        const auto &cP = mesh.cellPoints()[i];
+        Foam::vectorList p(cP.size());
+        for (int j = 0; j < p.size(); j++)
+            p[j] = mesh.points()[cP[j]];
+
+        marker[i] = cellNum(p, c);
+
+        if (isEqual(marker[i], cSolid))
+            ++nSolid;
+        else if (isEqual(marker[i], cFluid))
+            ++nFluid;
+        else
+            ++nGhost;
+    }
+
+    // Ensure all solid cells not adjacent to fluid cells directly (through face) 
+    for (int i = 0; i < mesh.nCells(); i++)
+    {
+        if (isEqual(marker[i], cSolid))
+        {
+            const auto &cC = mesh.cellCells()[i];
+            for (int j = 0; j < cC.size(); j++)
+            {
+                const auto adjCI = cC[j];
+                if (isEqual(marker[adjCI], cFluid))
+                {
+                    marker[adjCI] = cGhost;
+                    --nFluid;
+                    ++nGhost;
+                }
+            }
+        }
+    }
+
+    if (nSolid > 0)
+    {
+        // Remove redundent ghost cells on fluid side (through face connection)
+        for (int i = 0; i < mesh.nCells(); i++)
+        {
+            if (isEqual(marker[i], cGhost))
+            {
+                const auto &cC = mesh.cellCells()[i];
+                bool adjToSolid = false;
+                for (int j = 0; j < cC.size(); j++)
+                {
+                    const auto adjCI = cC[j];
+                    if (isEqual(marker[adjCI], cSolid))
+                    {
+                        adjToSolid = true;
+                        break;
+                    }
+                }
+                if (!adjToSolid)
+                {
+                    marker[i] = cFluid;
+                    --nGhost;
+                    ++nFluid;
+                }
+            }
+        }
+    }
+
+    if (nFluid > 0)
+    {
+        // Remove redundent ghost cells on solid side (through face connection)
+        for (int i = 0; i < mesh.nCells(); i++)
+        {
+            if (isEqual(marker[i], cGhost))
+            {
+                const auto &cC = mesh.cellCells()[i];
+                bool adjToFluid = false;
+                for (int j = 0; j < cC.size(); j++)
+                {
+                    const auto adjCI = cC[j];
+                    if (isEqual(marker[adjCI], cFluid))
+                    {
+                        adjToFluid = true;
+                        break;
+                    }
+                }
+                if (!adjToFluid)
+                {
+                    marker[i] = cSolid;
+                    --nGhost;
+                    ++nSolid;
+                }
+            }
+        }
+    }
+
+    Foam::Info << nFluid << "(fluid) + " << nGhost << "(ghost) + " << nSolid << "(solid) = " << nFluid+nGhost+nSolid << "/" << mesh.nCells() << Foam::endl;
+}
+
+
+void ibInterp_Dirichlet_Linear(const Foam::vector &p_src, Foam::scalar val_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
+{
+    const int nADJ = p_adj.size();
+    double dx, dz;
+
+    Eigen::MatrixXd A(nADJ, 2);
+    Eigen::VectorXd b(nADJ);
+    Eigen::VectorXd C(2);
+
+    // Assemble adjacent interpolation equations
+    for (int i = 0; i < nADJ; i++)
+    {
+        b[i] = val_adj[i] - val_src;
+
+        dx = p_adj[i].x() - p_src.x();
+        dz = p_adj[i].z() - p_src.z();
+
+        A(i, 0) = dx;
+        A(i, 1) = dz;
+    }
+
+    // Solve least-squares coefficients
+    C = A.colPivHouseholderQr().solve(b);
+
+    // Interpolate at the image point
+    const Foam::vector p_img = 2.0 * p_src - p_dst;
+    dx = p_img.x() - p_src.x();
+    dz = p_img.z() - p_src.z();
+    const Foam::scalar val_img = val_src + C[0] * dx + C[1] * dz;
+
+    // Interpolate at the ghost point
+    val_dst = 2.0 * val_src - val_img;
+}
+
+void ibInterp_Neumann_Linear(const Foam::vector &p_src, const Foam::vector &n_src, Foam::scalar snGrad_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
+{
+    const int nADJ = p_adj.size();
+    double dx, dz;
+
+    Eigen::MatrixXd A(nADJ+1, 3);
+    Eigen::VectorXd b(nADJ+1);
+    Eigen::VectorXd C(3);
+    
+    // Assemble adjacent interpolation equations
+    for (int i = 0; i < nADJ; i++)
+    {
+        b[i] = val_adj[i];
+
+        dx = p_adj[i].x() - p_src.x();
+        dz = p_adj[i].z() - p_src.z();
+
+        A(i, 0) = 1.0;
+        A(i, 1) = dx;
+        A(i, 2) = dz;
+    }
+
+    // Incoporate the boundary condition
+    b[nADJ] = snGrad_src;
+    A(nADJ, 0) = 0.0;
+    A(nADJ, 1) = n_src.x();
+    A(nADJ, 2) = n_src.z();
+
+    // Solve least-squares coefficients
+    C = A.colPivHouseholderQr().solve(b);
+
+    // Interpolate at the ghost point
+    dx = p_dst.x() - p_src.x();
+    dz = p_dst.z() - p_src.z();
+    val_dst = C[0] + C[1] * dx + C[2] * dz;
+}
+
+void ibInterp_zeroGradient_Linear(const Foam::vector &p_src, const Foam::vector &n_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
+{
+    const int nADJ = p_adj.size();
+    double dx, dz;
+
+    Eigen::MatrixXd A(nADJ+1, 3);
+    Eigen::VectorXd b(nADJ+1);
+    Eigen::VectorXd C(3);
+    
+    // Assemble adjacent interpolation equations
+    for (int i = 0; i < nADJ; i++)
+    {
+        b[i] = val_adj[i];
+
+        dx = p_adj[i].x() - p_src.x();
+        dz = p_adj[i].z() - p_src.z();
+
+        A(i, 0) = 1.0;
+        A(i, 1) = dx;
+        A(i, 2) = dz;
+    }
+
+    // Incoporate the boundary condition
+    b[nADJ] = 0.0;
+    A(nADJ, 0) = 0.0;
+    A(nADJ, 1) = n_src.x();
+    A(nADJ, 2) = n_src.z();
+
+    // Solve least-squares coefficients
+    C = A.colPivHouseholderQr().solve(b);
+
+    // Interpolate at the image point
+    const Foam::vector p_img = 2.0 * p_src - p_dst;
+    dx = p_img.x() - p_src.x();
+    dz = p_img.z() - p_src.z();
+    const Foam::scalar val_img = C[0] + C[1] * dx + C[2] * dz;
+
+    // Interpolate at the ghost point
+    val_dst = val_img;
+}
+
+void ibInterp_Robin_Linear(const Foam::vector &p_src, const Foam::vector &n_src, Foam::scalar bc_alpha, Foam::scalar bc_beta, Foam::scalar bc_gamma, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
+{
+    const int nADJ = p_adj.size();
+    double dx, dz;
+
+    Eigen::MatrixXd A(nADJ+1, 3);
+    Eigen::VectorXd b(nADJ+1);
+    Eigen::VectorXd C(3);
+
+    // Assemble adjacent interpolation equations
+    for (int i = 0; i < nADJ; i++)
+    {
+        b[i] = val_adj[i];
+
+        dx = p_adj[i].x() - p_src.x();
+        dz = p_adj[i].z() - p_src.z();
+
+        A(i, 0) = 1.0;
+        A(i, 1) = dx;
+        A(i, 2) = dz;
+    }
+
+    // Incoporate the boundary condition
+    b[nADJ] = bc_gamma;
+    A(nADJ, 0) = bc_beta;
+    A(nADJ, 1) = bc_alpha * n_src.x();
+    A(nADJ, 2) = bc_alpha * n_src.z();
+
+    // Solve least-squares coefficients
+    C = A.colPivHouseholderQr().solve(b);
+
+    // Interpolate at the image point
+    const Foam::vector p_img = 2.0 * p_src - p_dst;
+    dx = p_img.x() - p_src.x();
+    dz = p_img.z() - p_src.z();
+    const double val_img = C[0] + C[1] * dx + C[2] * dz;
+
+    // Interpolate at the ghost point
+    double snGrad = C[1] * n_src.x() + C[2] * n_src.z();
+    double d = Foam::mag(p_dst - p_img);
+    val_dst = val_img - snGrad * d;
+}
+
+void ibInterp_Dirichlet_Quadratic(const Foam::vector &p_src, Foam::scalar val_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
+{
+    const int nADJ = p_adj.size();
+    double dx, dz;
+
+    Eigen::MatrixXd A(nADJ, 5);
+    Eigen::VectorXd b(nADJ);
+    Eigen::VectorXd C(5);
+
+    for (int i = 0; i < nADJ; i++)
+    {
+        b[i] = val_adj[i] - val_src;
+
+        dx = p_adj[i].x() - p_src.x();
+        dz = p_adj[i].z() - p_src.z();
+
+        A(i, 0) = dx;
+        A(i, 1) = dz;
+        A(i, 2) = dx*dz;
+        A(i, 3) = dx*dx;
+        A(i, 4) = dz*dz;
+    }
+
+    C = A.colPivHouseholderQr().solve(b);
+
+    dx = p_dst.x() - p_src.x();
+    dz = p_dst.z() - p_src.z();
+    val_dst = val_src + C[0] * dx + C[1] * dz + C[2] * dx*dz + C[3] * dx*dx + C[4] * dz*dz;
 }
 
 int main(int argc, char *argv[])
@@ -162,8 +485,6 @@ int main(int argc, char *argv[])
 	addressing.collectData(mesh_gas.C(), sten_coord);
 	addressing.collectData(cIbMarker, sten_ib);
 	addressing.collectData(T, sten_val);
-
-
 
 	while(runTime.loop())
 	{
