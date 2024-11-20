@@ -54,18 +54,49 @@ const Foam::scalar cFluid = 1.0;
 const Foam::scalar cGhost = 0.0;
 const Foam::scalar cSolid = -1.0;
 
+/* Cartesian grid spacing */
+const Foam::scalar h = 1.0 / 32;
+
 inline bool isEqual(double x, double y)
 {
     return std::abs(x-y) <= 1e-6 * std::abs(x);
 }
 
-const Foam::scalar h = 1.0 / 32;
-
-void xyz2ijk(double x, double y, double z, int &i, int &j, int &k)
+inline double normalizedCoord(double x_, double h_)
 {
-    i = int(x / h + 0.5);
-    j = int(y / h + 0.5);
-    k = int(z / h + 0.5);
+    return x_ / h_;
+}
+
+inline bool atFullSpacing(double x_, double h_)
+{
+    return isEqual(std::remainder(x_, h_) / h_, 0.0);
+}
+
+inline bool atHalfSpacing(double x_, double h_)
+{
+    return isEqual(std::remainder(x_, h_) / h_, 0.5);
+}
+
+inline bool isCellCentroid(double x_, double y_, double z_, double h_)
+{
+    return atHalfSpacing(x_, h_) && atHalfSpacing(y_, h_) && atHalfSpacing(z_, h_);
+}
+
+inline bool isCellCentroid(const Foam::vector &p_, double h_)
+{
+    return isCellCentroid(p_.x(), p_.y(), p_.z(), h_);
+}
+
+inline bool isNode(double x_, double y_, double z_, double h_)
+{
+    return atFullSpacing(x_, h_) && atFullSpacing(y_, h_) && atFullSpacing(z_, h_);
+}
+
+void xyz2ijk(double x_, double y_, double z_, double h_, int &i_, int &j_, int &k_)
+{
+    i_ = static_cast<int>(normalizedCoord(x_, h_) + 0.5);
+    j_ = static_cast<int>(normalizedCoord(y_, h_) + 0.5);
+    k_ = static_cast<int>(normalizedCoord(z_, h_) + 0.5);
 }
 
 void update_boundaryField(const Foam::fvMesh &mesh, const Foam::volScalarField &src1, const Foam::volVectorField &src2, Foam::surfaceScalarField &dst)
@@ -85,22 +116,22 @@ void update_boundaryField(const Foam::fvMesh &mesh, const Foam::volScalarField &
 const Foam::vector sphere_c0(0.5, 0.5, 0.5);
 const Foam::scalar sphere_r = 0.15;
 
-double distToSurf(const Foam::vector &c)
+inline double distToSurf(const Foam::vector &c)
 {
     return Foam::mag(c-sphere_c0) - sphere_r;
 }
 
-bool pntInFluid(const Foam::vector &c)
+inline bool pntInFluid(const Foam::vector &c)
 {
     return distToSurf(c) > 0.0;
 }
 
-bool pntInSolid(const Foam::vector &c)
+inline bool pntInSolid(const Foam::vector &c)
 {
     return !pntInFluid(c);
 }
 
-bool pntNearSurf(const Foam::vector &c)
+inline bool pntNearSurf(const Foam::vector &c)
 {
     const auto d = distToSurf(c);
     return std::abs(d) < 0.1 * h;
@@ -492,12 +523,10 @@ int main(int argc, char *argv[])
     Foam::Pout << addressing.stencil().size() << "/" << mesh_gas.nCells() << Foam::endl;
 
     // Initialize stencil storage
-    Foam::List<Foam::vectorList> sten_coord(mesh_gas.nCells());
+    Foam::List<Foam::vectorList> sten_pos(mesh_gas.nCells());
     Foam::List<Foam::scalarList> sten_ib(mesh_gas.nCells());
-    addressing.collectData(mesh_gas.C(), sten_coord);
+    addressing.collectData(mesh_gas.C(), sten_pos);
     addressing.collectData(cMarker, sten_ib);
-
-    return 0;
 
     while(runTime.loop())
     {
@@ -521,31 +550,36 @@ int main(int argc, char *argv[])
                     Foam::vector n_BI = p_BI / Foam::mag(p_BI);
                     p_BI = sphere_c0 + n_BI * sphere_r;
 
-                    // Neighborhood data
+                    // Extract neighborhood data
                     std::vector<Foam::label> idx;
                     std::vector<Foam::vector> pos;
                     std::vector<Foam::scalar> val_ux, val_uy, val_uz, val_p;
                     for (int j = 0; j < addressing.stencil()[i].size(); j++)
                     {
-
+                        if (isCellCentroid(sten_pos[i][j], h) && isEqual(sten_ib[i][j], cFluid))
+                            idx.push_back(j);
                     }
                     val_ux.resize(idx.size());
+                    val_uy.resize(idx.size());
                     val_uz.resize(idx.size());
                     val_p.resize(idx.size());
                     pos.resize(idx.size());
                     for (int j = 0; j < idx.size(); j++)
                     {
-                        const auto cI = idx[j];
-                        val_ux[j] = U[cI].x();
-                        val_uz[j] = U[cI].z();
-                        val_p[j] = p[cI];
-                        pos[j] = mesh_gas.C()[cI];
+                        const auto jloc = idx[j];
+                        val_ux[j] = sten_val_U[i][jloc].x();
+                        val_uy[j] = sten_val_U[i][jloc].y();
+                        val_uz[j] = sten_val_U[i][jloc].z();
+                        val_p[j] = sten_val_p[i][jloc];
+                        pos[j] = sten_pos[i][jloc];
                     }
 
+                    // Velocity
                     ibInterp_Dirichlet_Linear(p_BI, 0.0, pos, val_ux, mesh_gas.C()[i], U[i].x());
+                    ibInterp_Dirichlet_Linear(p_BI, 0.0, pos, val_uy, mesh_gas.C()[i], U[i].y());
                     ibInterp_Dirichlet_Linear(p_BI, 0.0, pos, val_uz, mesh_gas.C()[i], U[i].z());
 
-                    // ibInterp_Neumann_Linear(p_BI, n_BI, 0.0, pos, val_p, mesh_gas.C()[i], p[i]);
+                    // Pressure
                     ibInterp_zeroGradient_Linear(p_BI, n_BI, pos, val_p, mesh_gas.C()[i], p[i]);
                 }
             }
