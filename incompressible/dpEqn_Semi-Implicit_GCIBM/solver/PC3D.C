@@ -28,6 +28,7 @@
 #include <numeric>
 #include <limits>
 #include <string>
+#include <Eigen/Dense>
 
 /* Constants */
 const Foam::scalar s2ns = 1e9, ns2s = 1.0/s2ns;
@@ -55,7 +56,7 @@ const Foam::scalar cSolid = -1.0;
 
 inline bool isEqual(double x, double y)
 {
-	return std::abs(x-y) <= 1e-6 * std::abs(x);
+    return std::abs(x-y) <= 1e-6 * std::abs(x);
 }
 
 const Foam::scalar h = 1.0 / 32;
@@ -69,23 +70,24 @@ void xyz2ijk(double x, double y, double z, int &i, int &j, int &k)
 
 void update_boundaryField(const Foam::fvMesh &mesh, const Foam::volScalarField &src1, const Foam::volVectorField &src2, Foam::surfaceScalarField &dst)
 {
-	for (int pI = 0; pI < mesh.boundary().size(); pI++)
-	{
-		const auto &curPatch = mesh.boundary()[pI];
-		const auto &patch_val1 = src1.boundaryField()[pI];
-		const auto &patch_val2 = src2.boundaryField()[pI];
-		const auto &patch_Sn = mesh.Sf().boundaryField()[pI];
-		auto &patch_dst = dst.boundaryFieldRef()[pI];
-		for (int fI = 0; fI < curPatch.size(); fI++)
-			patch_dst[fI] = patch_val1[fI] * patch_val2[fI] & patch_Sn[fI];
-	}
+    for (int pI = 0; pI < mesh.boundary().size(); pI++)
+    {
+        const auto &curPatch = mesh.boundary()[pI];
+        const auto &patch_val1 = src1.boundaryField()[pI];
+        const auto &patch_val2 = src2.boundaryField()[pI];
+        const auto &patch_Sn = mesh.Sf().boundaryField()[pI];
+        auto &patch_dst = dst.boundaryFieldRef()[pI];
+        for (int fI = 0; fI < curPatch.size(); fI++)
+            patch_dst[fI] = patch_val1[fI] * patch_val2[fI] & patch_Sn[fI];
+    }
 }
+
+const Foam::vector sphere_c0(0.5, 0.5, 0.5);
+const Foam::scalar sphere_r = 0.15;
 
 double distToSurf(const Foam::vector &c)
 {
-	const Foam::vector c0(0.5, 0.5, 0.5);
-	const Foam::scalar r = 0.15;
-    return Foam::mag(c-c0) - r;
+    return Foam::mag(c-sphere_c0) - sphere_r;
 }
 
 bool pntInFluid(const Foam::vector &c)
@@ -242,7 +244,6 @@ void identifyIBCell(const Foam::fvMesh &mesh, Foam::volScalarField &marker)
 
     Foam::Info << nFluid << "(fluid) + " << nGhost << "(ghost) + " << nSolid << "(solid) = " << nFluid+nGhost+nSolid << "/" << mesh.nCells() << Foam::endl;
 }
-
 
 void ibInterp_Dirichlet_Linear(const Foam::vector &p_src, Foam::scalar val_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
 {
@@ -431,200 +432,248 @@ void ibInterp_Dirichlet_Quadratic(const Foam::vector &p_src, Foam::scalar val_sr
 
 int main(int argc, char *argv[])
 {
-	#include "setRootCase.H"
-	#include "createTime.H"
+    #include "setRootCase.H"
+    #include "createTime.H"
 
-	/* Load meshes and create variables */
-	#include "createMeshAndField.H"
+    /* Load meshes and create variables */
+    #include "createMeshAndField.H"
 
-	/* compressibleCreatePhi.H */
-	rhoUSn = Foam::fvc::interpolate(rhoU) & mesh_gas.Sf();
-	update_boundaryField(mesh_gas, rho, U, rhoUSn);
+    // Force calculation of extended edge addressing
+    {
+        const Foam::labelListList& edgeFaces = mesh_gas.edgeFaces();
+        const Foam::labelListList& edgeCells = mesh_gas.edgeCells();
+        const Foam::labelListList& pointCells = mesh_gas.pointCells();
+    }
 
-	/* Initialize */
-	{
-		for (int i = 0; i < mesh_gas.nCells(); i++)
-		{
-			p[i] = 0.0;
-			U[i].x() = 0.0;
-			U[i].y() = 0.0;
-			U[i].z() = 0.0;
-			rho[i] = 1.0;
-			rhoU[i] = rho[i] * U[i];
-			mu[i] = 1.0 / Re;
-		}
-		p.correctBoundaryConditions();
-		U.correctBoundaryConditions();
-		rho.correctBoundaryConditions();
-		rhoU.correctBoundaryConditions();
-		mu.correctBoundaryConditions();
+    /* compressibleCreatePhi.H */
+    rhoUSn = Foam::fvc::interpolate(rhoU) & mesh_gas.Sf();
+    update_boundaryField(mesh_gas, rho, U, rhoUSn);
 
-		U_next = U;
-		p_next = p;
-		rhoU_next = rhoU;
+    /* Initialize */
+    {
+        for (int i = 0; i < mesh_gas.nCells(); i++)
+        {
+            p[i] = 0.0;
+            U[i].x() = 0.0;
+            U[i].y() = 0.0;
+            U[i].z() = 0.0;
+            rho[i] = 1.0;
+            rhoU[i] = rho[i] * U[i];
+            mu[i] = 1.0 / Re;
+        }
+        p.correctBoundaryConditions();
+        U.correctBoundaryConditions();
+        rho.correctBoundaryConditions();
+        rhoU.correctBoundaryConditions();
+        mu.correctBoundaryConditions();
 
-		U_next.correctBoundaryConditions();
-		p_next.correctBoundaryConditions();
-		rhoU_next.correctBoundaryConditions();
-	}
+        U_next = U;
+        p_next = p;
+        rhoU_next = rhoU;
 
-	// Force calculation of extended edge addressing
-	{
-		const Foam::labelListList& edgeFaces = mesh_gas.edgeFaces();
-		const Foam::labelListList& edgeCells = mesh_gas.edgeCells();
-		const Foam::labelListList& pointCells = mesh_gas.pointCells();
-	}
+        U_next.correctBoundaryConditions();
+        p_next.correctBoundaryConditions();
+        rhoU_next.correctBoundaryConditions();
+    }
 
-	// Extended stencil, processor-boundaries are dealt with automatically
-	const Foam::extendedCentredCellToCellStencil& addressing = Foam::centredCPCCellToCellStencilObject::New(mesh_gas);
+    /* Classify mesh cells */
+    identifyIBCell(mesh_gas, cMarker);
+    for (int i = 0; i < mesh_gas.nCells(); i++)
+    {
+        if (cMarker[i] > 0)
+            cIbMask[i] = 1.0;
+        else
+            cIbMask[i] = 0.0;
+    }
 
-	// Initialize stencil storage
-	Foam::List<Foam::vectorList> sten_coord(mesh_gas.nCells());
-	Foam::List<Foam::scalarList> sten_ib(mesh_gas.nCells());
-	Foam::List<Foam::scalarList> sten_val(mesh_gas.nCells());
-	addressing.collectData(mesh_gas.C(), sten_coord);
-	addressing.collectData(cIbMarker, sten_ib);
-	addressing.collectData(T, sten_val);
+    // Extended stencil, processor-boundaries are dealt with automatically
+    const Foam::extendedCentredCellToCellStencil& addressing = Foam::centredCPCCellToCellStencilObject::New(mesh_gas);
 
-	while(runTime.loop())
-	{
-		const Foam::dimensionedScalar dt(Foam::dimTime, runTime.deltaTValue());
-		Foam::Info << "\nn=" << runTime.timeIndex() << ", t=" << std::stod(runTime.timeName(), nullptr)*s2ms << "ms, dt=" << dt.value()*s2ns << "ns" << Foam::endl;
-		runTime.write();
+    Foam::Pout << addressing.stencil().size() << "/" << mesh_gas.nCells() << Foam::endl;
 
-		/* Interpolation on IB cells */
-		{
-			for (int i = 0; i < mesh_gas.nCells(); i++)
-			{
-				if (isEqual(cMarker[i], cIB))
-				{
-					U[i].x() = 0.0;
-					U[i].y() = 0.0;
-					U[i].z() = 0.0;
-				}
-			}
-		}
+    // Initialize stencil storage
+    Foam::List<Foam::vectorList> sten_coord(mesh_gas.nCells());
+    Foam::List<Foam::scalarList> sten_ib(mesh_gas.nCells());
+    addressing.collectData(mesh_gas.C(), sten_coord);
+    addressing.collectData(cMarker, sten_ib);
 
-		/* Update gas-phase @(n) with Tw @(n) as Dirichlet B.C. and sources terms @(n) */
-		{
-			/* Semi-implicit iteration */
-			bool converged = false;
-			int m = 0;
-			while(++m <= 10)
-			{
-				Foam::Info << "m=" << m << Foam::endl;
+    return 0;
 
-				/* Predictor */
-				{
-					/* Provisional momentum */
-					{
-						grad_p = Foam::fvc::grad(p_next);
-						U_star = U;
-						Foam::fvVectorMatrix UEqn
-						(
-							Foam::fvm::ddt(rho, U_star) + Foam::fvc::div(rhoUSn, U_next) == -cIbMask * grad_p + 0.5*(Foam::fvm::laplacian(mu, U_star)+Foam::fvc::laplacian(mu, U_next))
-						);
-						UEqn.solve();
-					}
+    while(runTime.loop())
+    {
+        const Foam::dimensionedScalar dt(Foam::dimTime, runTime.deltaTValue());
+        Foam::Info << "\nn=" << runTime.timeIndex() << ", t=" << std::stod(runTime.timeName(), nullptr)*s2ms << "ms, dt=" << dt.value()*s2ns << "ns" << Foam::endl;
+        runTime.write();
 
-					/* Provisional mass flux */
-					rhoU_star = rho * U_star;
-					rhoUSn_star = Foam::fvc::interpolate(rhoU_star) & mesh_gas.Sf();
-					Foam::surfaceScalarField grad_p_f_compact(Foam::fvc::snGrad(p_next) * mesh_gas.magSf());
-					Foam::surfaceScalarField grad_p_f_mean(Foam::fvc::interpolate(grad_p) & mesh_gas.Sf());
-					rhoUSn_star -= dt * (grad_p_f_compact - grad_p_f_mean);
-					update_boundaryField(mesh_gas, rho, U_next, rhoUSn_star);
-				}
+        /* Interpolation on IB cells */
+        {
+            Foam::List<Foam::vectorList> sten_val_U(mesh_gas.nCells());
+            Foam::List<Foam::scalarList> sten_val_p(mesh_gas.nCells());
+            addressing.collectData(U, sten_val_U);
+            addressing.collectData(p, sten_val_p);
 
-				/* Corrector */
-				{
-					/* Pressure-correction Helmholtz equation */
-					Foam::fvScalarMatrix dpEqn
-					(
-						dt * Foam::fvm::laplacian(dp) == Foam::fvc::div(rhoUSn_star)
-					);
-					for (int i=0; i < mesh_gas.nCells(); i++)
-					{
-						if (cMarker[i] < cFluid)
-							dpEqn.source()[i] = 0.0;
-					}
-					dpEqn.solve();
+            for (int i = 0; i < mesh_gas.nCells(); i++)
+            {
+                if (isEqual(cMarker[i], cGhost))
+                {
+                    // Position and normal of the Boundary Intersection point
+                    Foam::vector p_BI = mesh_gas.C()[i] - sphere_c0;
+                    Foam::vector n_BI = p_BI / Foam::mag(p_BI);
+                    p_BI = sphere_c0 + n_BI * sphere_r;
 
-					/* Update */
-					p_next += dp;
-					p_next.correctBoundaryConditions();
+                    // Neighborhood data
+                    std::vector<Foam::label> idx;
+                    std::vector<Foam::vector> pos;
+                    std::vector<Foam::scalar> val_ux, val_uy, val_uz, val_p;
+                    for (int j = 0; j < addressing.stencil()[i].size(); j++)
+                    {
 
-					rhoU_next = rhoU_star - dt * Foam::fvc::grad(dp);
-					rhoU_next.correctBoundaryConditions();
+                    }
+                    val_ux.resize(idx.size());
+                    val_uz.resize(idx.size());
+                    val_p.resize(idx.size());
+                    pos.resize(idx.size());
+                    for (int j = 0; j < idx.size(); j++)
+                    {
+                        const auto cI = idx[j];
+                        val_ux[j] = U[cI].x();
+                        val_uz[j] = U[cI].z();
+                        val_p[j] = p[cI];
+                        pos[j] = mesh_gas.C()[cI];
+                    }
 
-					U_next = rhoU_next / rho;
-					U_next.correctBoundaryConditions();
+                    ibInterp_Dirichlet_Linear(p_BI, 0.0, pos, val_ux, mesh_gas.C()[i], U[i].x());
+                    ibInterp_Dirichlet_Linear(p_BI, 0.0, pos, val_uz, mesh_gas.C()[i], U[i].z());
 
-					rhoUSn = rhoUSn_star - dt * Foam::fvc::snGrad(dp) * mesh_gas.magSf();
-					update_boundaryField(mesh_gas, rho, U_next, rhoUSn);
+                    // ibInterp_Neumann_Linear(p_BI, n_BI, 0.0, pos, val_p, mesh_gas.C()[i], p[i]);
+                    ibInterp_zeroGradient_Linear(p_BI, n_BI, pos, val_p, mesh_gas.C()[i], p[i]);
+                }
+            }
+        }
 
-					div_rhoU = Foam::fvc::div(rhoUSn);
-				}
+        /* Update gas-phase @(n) with Tw @(n) as Dirichlet B.C. and sources terms @(n) */
+        {
+            U_next = U;
+            p_next = p;
 
-				/* Check convergence */
-				{
-					Foam::scalar eps_inf=0.0, eps_1=0.0, eps_2=0.0;
-					for (int i = 0; i < mesh_gas.nCells(); i++)
-					{
-						const auto cVal = std::abs(dp[i]);
-						eps_inf = std::max(eps_inf, cVal);
-						eps_1 += cVal;
-						eps_2 += cVal*cVal;
-					}
-					Foam::reduce(eps_inf, Foam::maxOp<Foam::scalar>());
-					Foam::reduce(eps_1, Foam::sumOp<Foam::scalar>());
-					Foam::reduce(eps_2, Foam::sumOp<Foam::scalar>());
-					eps_1 /= meshInfo_gas.nTotalCells();
-					eps_2 = std::sqrt(eps_2/meshInfo_gas.nTotalCells());
-					Foam::Info << "||dp||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
-					const bool criteria_dp = eps_inf < 1e-3;
+            /* Semi-implicit iteration */
+            bool converged = false;
+            int m = 0;
+            while(++m <= 10)
+            {
+                Foam::Info << "m=" << m << Foam::endl;
 
-					eps_inf=0.0, eps_1=0.0, eps_2=0.0;
-					for (int i = 0; i < mesh_gas.nCells(); i++)
-					{
-						const auto cVal = std::abs(div_rhoU[i]);
-						eps_inf = std::max(eps_inf, cVal);
-						eps_1 += cVal;
-						eps_2 += cVal*cVal;
-					}
-					Foam::reduce(eps_inf, Foam::maxOp<Foam::scalar>());
-					Foam::reduce(eps_1, Foam::sumOp<Foam::scalar>());
-					Foam::reduce(eps_2, Foam::sumOp<Foam::scalar>());
-					eps_1 /= meshInfo_gas.nTotalCells();
-					eps_2 = std::sqrt(eps_2/meshInfo_gas.nTotalCells());
-					Foam::Info << "||div(U)||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
-					const bool criteria_div = eps_inf < 1e-3;
+                /* Predictor */
+                {
+                    /* Provisional momentum */
+                    {
+                        grad_p = Foam::fvc::grad(p_next);
+                        U_star = U;
+                        Foam::fvVectorMatrix UEqn
+                        (
+                            Foam::fvm::ddt(rho, U_star) + Foam::fvc::div(rhoUSn, U_next) == -cIbMask * grad_p + 0.5*(Foam::fvm::laplacian(mu, U_star)+Foam::fvc::laplacian(mu, U_next))
+                        );
+                        UEqn.solve();
+                    }
 
-					converged = criteria_dp || criteria_div;
-					if (converged && m > 1)
-						break;
-				}
-			}
-			if (!converged)
-				Foam::Info << "Gas-phase failed to converged after semi-implicit iterations!" << Foam::endl;
+                    /* Provisional mass flux */
+                    rhoU_star = rho * U_star;
+                    rhoUSn_star = Foam::fvc::interpolate(rhoU_star) & mesh_gas.Sf();
+                    Foam::surfaceScalarField grad_p_f_compact(Foam::fvc::snGrad(p_next) * mesh_gas.magSf());
+                    Foam::surfaceScalarField grad_p_f_mean(Foam::fvc::interpolate(grad_p) & mesh_gas.Sf());
+                    rhoUSn_star -= dt * (grad_p_f_compact - grad_p_f_mean);
+                    update_boundaryField(mesh_gas, rho, U_next, rhoUSn_star);
+                }
 
-			/* Update to next time-level */
-			U = U_next;
-			p = p_next;
-			rhoU = rhoU_next;
+                /* Corrector */
+                {
+                    /* Pressure-correction Helmholtz equation */
+                    Foam::fvScalarMatrix dpEqn
+                    (
+                        dt * Foam::fvm::laplacian(dp) == Foam::fvc::div(rhoUSn_star)
+                    );
+                    for (int i=0; i < mesh_gas.nCells(); i++)
+                    {
+                        if (cMarker[i] < cFluid)
+                            dpEqn.source()[i] = 0.0;
+                    }
+                    dpEqn.solve();
 
-			U.correctBoundaryConditions();
-			p.correctBoundaryConditions();
-			rhoU.correctBoundaryConditions();
-			
-			/* Check range */
-			{
-				Foam::Info << Foam::endl;
-				Foam::Info << "|U|: " << Foam::min(Foam::mag(U_next)).value() << " ~ " << Foam::max(Foam::mag(U_next)).value() << Foam::endl;
-				Foam::Info << "p: " << Foam::min(p_next).value() << " ~ " << Foam::max(p_next).value() << Foam::endl;
-			}
-		}
-	}
+                    /* Update */
+                    p_next += dp;
+                    p_next.correctBoundaryConditions();
+
+                    rhoU_next = rhoU_star - dt * Foam::fvc::grad(dp);
+                    rhoU_next.correctBoundaryConditions();
+
+                    U_next = rhoU_next / rho;
+                    U_next.correctBoundaryConditions();
+
+                    rhoUSn = rhoUSn_star - dt * Foam::fvc::snGrad(dp) * mesh_gas.magSf();
+                    update_boundaryField(mesh_gas, rho, U_next, rhoUSn);
+
+                    div_rhoU = Foam::fvc::div(rhoUSn);
+                }
+
+                /* Check convergence */
+                {
+                    Foam::scalar eps_inf=0.0, eps_1=0.0, eps_2=0.0;
+                    for (int i = 0; i < mesh_gas.nCells(); i++)
+                    {
+                        const auto cVal = std::abs(dp[i]);
+                        eps_inf = std::max(eps_inf, cVal);
+                        eps_1 += cVal;
+                        eps_2 += cVal*cVal;
+                    }
+                    Foam::reduce(eps_inf, Foam::maxOp<Foam::scalar>());
+                    Foam::reduce(eps_1, Foam::sumOp<Foam::scalar>());
+                    Foam::reduce(eps_2, Foam::sumOp<Foam::scalar>());
+                    eps_1 /= meshInfo_gas.nTotalCells();
+                    eps_2 = std::sqrt(eps_2/meshInfo_gas.nTotalCells());
+                    Foam::Info << "||dp||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
+                    const bool criteria_dp = eps_inf < 1e-3;
+
+                    eps_inf=0.0, eps_1=0.0, eps_2=0.0;
+                    for (int i = 0; i < mesh_gas.nCells(); i++)
+                    {
+                        const auto cVal = std::abs(div_rhoU[i]);
+                        eps_inf = std::max(eps_inf, cVal);
+                        eps_1 += cVal;
+                        eps_2 += cVal*cVal;
+                    }
+                    Foam::reduce(eps_inf, Foam::maxOp<Foam::scalar>());
+                    Foam::reduce(eps_1, Foam::sumOp<Foam::scalar>());
+                    Foam::reduce(eps_2, Foam::sumOp<Foam::scalar>());
+                    eps_1 /= meshInfo_gas.nTotalCells();
+                    eps_2 = std::sqrt(eps_2/meshInfo_gas.nTotalCells());
+                    Foam::Info << "||div(U)||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
+                    const bool criteria_div = eps_inf < 1e-3;
+
+                    converged = criteria_dp || criteria_div;
+                    if (converged && m > 1)
+                        break;
+                }
+            }
+            if (!converged)
+                Foam::Info << "Gas-phase failed to converged after semi-implicit iterations!" << Foam::endl;
+
+            /* Update to next time-level */
+            U = U_next;
+            p = p_next;
+            rhoU = rhoU_next;
+
+            U.correctBoundaryConditions();
+            p.correctBoundaryConditions();
+            rhoU.correctBoundaryConditions();
+            
+            /* Check range */
+            {
+                Foam::Info << Foam::endl;
+                Foam::Info << "|U|: " << Foam::min(Foam::mag(U_next)).value() << " ~ " << Foam::max(Foam::mag(U_next)).value() << Foam::endl;
+                Foam::Info << "p: " << Foam::min(p_next).value() << " ~ " << Foam::max(p_next).value() << Foam::endl;
+            }
+        }
+    }
 
     return 0;
 }
