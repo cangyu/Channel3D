@@ -69,12 +69,12 @@ inline double normalizedCoord(double x_, double h_)
 
 inline bool atFullSpacing(double x_, double h_)
 {
-    return isEqual(std::remainder(x_, h_) / h_, 0.0);
+    return isEqual(std::remainder(normalizedCoord(x_, h_), 1.0), 0.0);
 }
 
 inline bool atHalfSpacing(double x_, double h_)
 {
-    return isEqual(std::remainder(x_, h_) / h_, 0.5);
+    return isEqual(std::remainder(normalizedCoord(x_, h_), 0.5), 0.0);
 }
 
 inline bool isCellCentroid(double x_, double y_, double z_, double h_)
@@ -469,13 +469,6 @@ int main(int argc, char *argv[])
     /* Load meshes and create variables */
     #include "createMeshAndField.H"
 
-    // Force calculation of extended edge addressing
-    {
-        const Foam::labelListList& edgeFaces = mesh_gas.edgeFaces();
-        const Foam::labelListList& edgeCells = mesh_gas.edgeCells();
-        const Foam::labelListList& pointCells = mesh_gas.pointCells();
-    }
-
     /* compressibleCreatePhi.H */
     rhoUSn = Foam::fvc::interpolate(rhoU) & mesh_gas.Sf();
     update_boundaryField(mesh_gas, rho, U, rhoUSn);
@@ -517,10 +510,10 @@ int main(int argc, char *argv[])
             cIbMask[i] = 0.0;
     }
 
-    // Extended stencil, processor-boundaries are dealt with automatically
+    /* Extended stencil  */
+    // Processor-boundaries are dealt with automatically
     const Foam::extendedCentredCellToCellStencil& addressing = Foam::centredCPCCellToCellStencilObject::New(mesh_gas);
-
-    Foam::Pout << addressing.stencil().size() << "/" << mesh_gas.nCells() << Foam::endl;
+    // Foam::Pout << addressing.stencil().size() << "/" << mesh_gas.nCells() << Foam::endl;
 
     // Initialize stencil storage
     Foam::List<Foam::vectorList> sten_pos(mesh_gas.nCells());
@@ -552,26 +545,21 @@ int main(int argc, char *argv[])
 
                     // Extract neighborhood data
                     std::vector<Foam::label> idx;
-                    std::vector<Foam::vector> pos;
-                    std::vector<Foam::scalar> val_ux, val_uy, val_uz, val_p;
                     for (int j = 0; j < addressing.stencil()[i].size(); j++)
                     {
                         if (isCellCentroid(sten_pos[i][j], h) && isEqual(sten_ib[i][j], cFluid))
                             idx.push_back(j);
                     }
-                    val_ux.resize(idx.size());
-                    val_uy.resize(idx.size());
-                    val_uz.resize(idx.size());
-                    val_p.resize(idx.size());
-                    pos.resize(idx.size());
+                    std::vector<Foam::vector> pos(idx.size());
+                    std::vector<Foam::scalar> val_ux(idx.size()), val_uy(idx.size()), val_uz(idx.size()), val_p(idx.size());
                     for (int j = 0; j < idx.size(); j++)
                     {
                         const auto jloc = idx[j];
+                        pos[j] = sten_pos[i][jloc];
                         val_ux[j] = sten_val_U[i][jloc].x();
                         val_uy[j] = sten_val_U[i][jloc].y();
                         val_uz[j] = sten_val_U[i][jloc].z();
                         val_p[j] = sten_val_p[i][jloc];
-                        pos[j] = sten_pos[i][jloc];
                     }
 
                     // Velocity
