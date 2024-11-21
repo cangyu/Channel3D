@@ -279,11 +279,11 @@ void identifyIBCell(const Foam::fvMesh &mesh, Foam::volScalarField &marker)
 void ibInterp_Dirichlet_Linear(const Foam::vector &p_src, Foam::scalar val_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
 {
     const int nADJ = p_adj.size();
-    double dx, dz;
+    double dx, dy, dz;
 
-    Eigen::MatrixXd A(nADJ, 2);
+    Eigen::MatrixXd A(nADJ, 3);
     Eigen::VectorXd b(nADJ);
-    Eigen::VectorXd C(2);
+    Eigen::VectorXd C(3);
 
     // Assemble adjacent interpolation equations
     for (int i = 0; i < nADJ; i++)
@@ -291,10 +291,12 @@ void ibInterp_Dirichlet_Linear(const Foam::vector &p_src, Foam::scalar val_src, 
         b[i] = val_adj[i] - val_src;
 
         dx = p_adj[i].x() - p_src.x();
+        dx = p_adj[i].y() - p_src.y();
         dz = p_adj[i].z() - p_src.z();
 
         A(i, 0) = dx;
-        A(i, 1) = dz;
+        A(i, 1) = dy;
+        A(i, 2) = dz;
     }
 
     // Solve least-squares coefficients
@@ -303,8 +305,9 @@ void ibInterp_Dirichlet_Linear(const Foam::vector &p_src, Foam::scalar val_src, 
     // Interpolate at the image point
     const Foam::vector p_img = 2.0 * p_src - p_dst;
     dx = p_img.x() - p_src.x();
+    dy = p_img.y() - p_src.y();
     dz = p_img.z() - p_src.z();
-    const Foam::scalar val_img = val_src + C[0] * dx + C[1] * dz;
+    const Foam::scalar val_img = val_src + C[0] * dx + C[1] * dy + C[2] * dz;
 
     // Interpolate at the ghost point
     val_dst = 2.0 * val_src - val_img;
@@ -313,11 +316,11 @@ void ibInterp_Dirichlet_Linear(const Foam::vector &p_src, Foam::scalar val_src, 
 void ibInterp_Neumann_Linear(const Foam::vector &p_src, const Foam::vector &n_src, Foam::scalar snGrad_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
 {
     const int nADJ = p_adj.size();
-    double dx, dz;
+    double dx, dy, dz;
 
-    Eigen::MatrixXd A(nADJ+1, 3);
+    Eigen::MatrixXd A(nADJ+1, 4);
     Eigen::VectorXd b(nADJ+1);
-    Eigen::VectorXd C(3);
+    Eigen::VectorXd C(4);
     
     // Assemble adjacent interpolation equations
     for (int i = 0; i < nADJ; i++)
@@ -325,36 +328,40 @@ void ibInterp_Neumann_Linear(const Foam::vector &p_src, const Foam::vector &n_sr
         b[i] = val_adj[i];
 
         dx = p_adj[i].x() - p_src.x();
+        dy = p_adj[i].y() - p_src.y();
         dz = p_adj[i].z() - p_src.z();
 
         A(i, 0) = 1.0;
         A(i, 1) = dx;
-        A(i, 2) = dz;
+        A(i, 2) = dy;
+        A(i, 3) = dz;
     }
 
     // Incoporate the boundary condition
     b[nADJ] = snGrad_src;
     A(nADJ, 0) = 0.0;
     A(nADJ, 1) = n_src.x();
-    A(nADJ, 2) = n_src.z();
+    A(nADJ, 2) = n_src.y();
+    A(nADJ, 3) = n_src.z();
 
     // Solve least-squares coefficients
     C = A.colPivHouseholderQr().solve(b);
 
     // Interpolate at the ghost point
     dx = p_dst.x() - p_src.x();
+    dy = p_dst.y() - p_src.y();
     dz = p_dst.z() - p_src.z();
-    val_dst = C[0] + C[1] * dx + C[2] * dz;
+    val_dst = C[0] + C[1] * dx + C[2] * dy + C[3] * dz;
 }
 
 void ibInterp_zeroGradient_Linear(const Foam::vector &p_src, const Foam::vector &n_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
 {
     const int nADJ = p_adj.size();
-    double dx, dz;
+    double dx, dy, dz;
 
-    Eigen::MatrixXd A(nADJ+1, 3);
+    Eigen::MatrixXd A(nADJ+1, 4);
     Eigen::VectorXd b(nADJ+1);
-    Eigen::VectorXd C(3);
+    Eigen::VectorXd C(4);
     
     // Assemble adjacent interpolation equations
     for (int i = 0; i < nADJ; i++)
@@ -362,18 +369,21 @@ void ibInterp_zeroGradient_Linear(const Foam::vector &p_src, const Foam::vector 
         b[i] = val_adj[i];
 
         dx = p_adj[i].x() - p_src.x();
+        dy = p_adj[i].y() - p_src.y();
         dz = p_adj[i].z() - p_src.z();
 
         A(i, 0) = 1.0;
         A(i, 1) = dx;
-        A(i, 2) = dz;
+        A(i, 2) = dy;
+        A(i, 3) = dz;
     }
 
     // Incoporate the boundary condition
     b[nADJ] = 0.0;
     A(nADJ, 0) = 0.0;
     A(nADJ, 1) = n_src.x();
-    A(nADJ, 2) = n_src.z();
+    A(nADJ, 2) = n_src.y();
+    A(nADJ, 3) = n_src.z();
 
     // Solve least-squares coefficients
     C = A.colPivHouseholderQr().solve(b);
@@ -381,8 +391,9 @@ void ibInterp_zeroGradient_Linear(const Foam::vector &p_src, const Foam::vector 
     // Interpolate at the image point
     const Foam::vector p_img = 2.0 * p_src - p_dst;
     dx = p_img.x() - p_src.x();
+    dy = p_img.y() - p_src.y();
     dz = p_img.z() - p_src.z();
-    const Foam::scalar val_img = C[0] + C[1] * dx + C[2] * dz;
+    const Foam::scalar val_img = C[0] + C[1] * dx + C[2] * dy + C[3] * dz;
 
     // Interpolate at the ghost point
     val_dst = val_img;
@@ -391,11 +402,11 @@ void ibInterp_zeroGradient_Linear(const Foam::vector &p_src, const Foam::vector 
 void ibInterp_Robin_Linear(const Foam::vector &p_src, const Foam::vector &n_src, Foam::scalar bc_alpha, Foam::scalar bc_beta, Foam::scalar bc_gamma, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
 {
     const int nADJ = p_adj.size();
-    double dx, dz;
+    double dx, dy, dz;
 
-    Eigen::MatrixXd A(nADJ+1, 3);
+    Eigen::MatrixXd A(nADJ+1, 4);
     Eigen::VectorXd b(nADJ+1);
-    Eigen::VectorXd C(3);
+    Eigen::VectorXd C(4);
 
     // Assemble adjacent interpolation equations
     for (int i = 0; i < nADJ; i++)
@@ -403,18 +414,21 @@ void ibInterp_Robin_Linear(const Foam::vector &p_src, const Foam::vector &n_src,
         b[i] = val_adj[i];
 
         dx = p_adj[i].x() - p_src.x();
+        dy = p_adj[i].y() - p_src.y();
         dz = p_adj[i].z() - p_src.z();
 
         A(i, 0) = 1.0;
         A(i, 1) = dx;
-        A(i, 2) = dz;
+        A(i, 2) = dy;
+        A(i, 3) = dz;
     }
 
     // Incoporate the boundary condition
     b[nADJ] = bc_gamma;
     A(nADJ, 0) = bc_beta;
     A(nADJ, 1) = bc_alpha * n_src.x();
-    A(nADJ, 2) = bc_alpha * n_src.z();
+    A(nADJ, 2) = bc_alpha * n_src.y();
+    A(nADJ, 3) = bc_alpha * n_src.z();
 
     // Solve least-squares coefficients
     C = A.colPivHouseholderQr().solve(b);
@@ -422,43 +436,14 @@ void ibInterp_Robin_Linear(const Foam::vector &p_src, const Foam::vector &n_src,
     // Interpolate at the image point
     const Foam::vector p_img = 2.0 * p_src - p_dst;
     dx = p_img.x() - p_src.x();
+    dy = p_img.y() - p_src.y();
     dz = p_img.z() - p_src.z();
-    const double val_img = C[0] + C[1] * dx + C[2] * dz;
+    const double val_img = C[0] + C[1] * dx + C[2] * dy + C[3] * dz;
 
     // Interpolate at the ghost point
-    double snGrad = C[1] * n_src.x() + C[2] * n_src.z();
+    double snGrad = (bc_gamma - bc_beta * C[0]) / bc_alpha;
     double d = Foam::mag(p_dst - p_img);
     val_dst = val_img - snGrad * d;
-}
-
-void ibInterp_Dirichlet_Quadratic(const Foam::vector &p_src, Foam::scalar val_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
-{
-    const int nADJ = p_adj.size();
-    double dx, dz;
-
-    Eigen::MatrixXd A(nADJ, 5);
-    Eigen::VectorXd b(nADJ);
-    Eigen::VectorXd C(5);
-
-    for (int i = 0; i < nADJ; i++)
-    {
-        b[i] = val_adj[i] - val_src;
-
-        dx = p_adj[i].x() - p_src.x();
-        dz = p_adj[i].z() - p_src.z();
-
-        A(i, 0) = dx;
-        A(i, 1) = dz;
-        A(i, 2) = dx*dz;
-        A(i, 3) = dx*dx;
-        A(i, 4) = dz*dz;
-    }
-
-    C = A.colPivHouseholderQr().solve(b);
-
-    dx = p_dst.x() - p_src.x();
-    dz = p_dst.z() - p_src.z();
-    val_dst = val_src + C[0] * dx + C[1] * dz + C[2] * dx*dz + C[3] * dx*dx + C[4] * dz*dz;
 }
 
 int main(int argc, char *argv[])
@@ -593,8 +578,29 @@ int main(int argc, char *argv[])
                         U_star = U;
                         Foam::fvVectorMatrix UEqn
                         (
-                            Foam::fvm::ddt(rho, U_star) + Foam::fvc::div(rhoUSn, U_next) == -cIbMask * grad_p + 0.5*(Foam::fvm::laplacian(mu, U_star)+Foam::fvc::laplacian(mu, U_next))
+                            Foam::fvm::ddt(rho, U_star) + Foam::fvc::div(rhoUSn, U_next) == -grad_p + Foam::fvc::laplacian(mu, U_next)
                         );
+
+                        // For solid cells, set velocity to zero;
+                        // For ghost cells, set velocity to interpolated value.
+                        {
+                            Foam::vectorList val;
+                            Foam::labelList idx;
+
+                            for (int i=0; i < mesh_gas.nCells(); i++)
+                            {
+                                if (cMarker[i] < cFluid)
+                                {
+                                    idx.append(i);
+                                    if (isEqual(cMarker[i], cSolid))
+                                        val.append(Foam::vector(0.0, 0.0, 0.0));
+                                    else
+                                        val.append(U[i]);
+                                }
+                            }
+                            UEqn.setValues(idx, val);
+                        }
+
                         UEqn.solve();
                     }
 
@@ -614,11 +620,23 @@ int main(int argc, char *argv[])
                     (
                         dt * Foam::fvm::laplacian(dp) == Foam::fvc::div(rhoUSn_star)
                     );
-                    for (int i=0; i < mesh_gas.nCells(); i++)
+
+                    // For both solid and ghost cells, set the incremental pressure-correction to zero.
                     {
-                        if (cMarker[i] < cFluid)
-                            dpEqn.source()[i] = 0.0;
+                        Foam::scalarList val;
+                        Foam::labelList idx;
+
+                        for (int i=0; i < mesh_gas.nCells(); i++)
+                        {
+                            if (cMarker[i] < cFluid)
+                            {
+                                idx.append(i);
+                                val.append(0.0);
+                            }
+                        }
+                        dpEqn.setValues(idx, val);
                     }
+
                     dpEqn.solve();
 
                     /* Update */
