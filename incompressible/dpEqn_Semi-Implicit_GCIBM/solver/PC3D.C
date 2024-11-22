@@ -45,17 +45,22 @@ const Foam::scalar one_psi = 6894.76;   // Unit: Pa
 const Foam::scalar one_mpa = 1e6;       // Unit: Pa
 const Foam::scalar G0 = 1.4;            // Specific heat ratio for ideal gas.
 
-const Foam::scalar Pr = 1.0;    // Prandtl number
-const Foam::scalar Le = 1.0;    // Lewis number
-const Foam::scalar Re = 100.0;  // Reynolds number
-
 /* Classification of gas-phase cells */
 const Foam::scalar cFluid = 1.0;
 const Foam::scalar cGhost = 0.0;
 const Foam::scalar cSolid = -1.0;
 
+/* Flow condition */
+const Foam::scalar Re = 10.0;  // Reynolds number
+
+/* Sphere parameter */
+const Foam::vector sphere_c0(2, 2, 1.5);
+const Foam::scalar sphere_r = 0.5;
+
 /* Cartesian grid spacing */
-const Foam::scalar h = 1.0 / 32;
+const Foam::scalar L = 4.0;
+const Foam::label N = 32;
+const Foam::scalar h = L / N;
 
 inline bool isEqual(double x, double y)
 {
@@ -92,6 +97,11 @@ inline bool isNode(double x_, double y_, double z_, double h_)
     return atFullSpacing(x_, h_) && atFullSpacing(y_, h_) && atFullSpacing(z_, h_);
 }
 
+inline bool isNode(const Foam::vector &p_, double h_)
+{
+    return isNode(p_.x(), p_.y(), p_.z(), h_);
+}
+
 void xyz2ijk(double x_, double y_, double z_, double h_, int &i_, int &j_, int &k_)
 {
     i_ = static_cast<int>(normalizedCoord(x_, h_) + 0.5);
@@ -112,9 +122,6 @@ void update_boundaryField(const Foam::fvMesh &mesh, const Foam::volScalarField &
             patch_dst[fI] = patch_val1[fI] * patch_val2[fI] & patch_Sn[fI];
     }
 }
-
-const Foam::vector sphere_c0(0.5, 0.5, 0.5);
-const Foam::scalar sphere_r = 0.15;
 
 inline double distToSurf(const Foam::vector &c)
 {
@@ -273,7 +280,7 @@ void identifyIBCell(const Foam::fvMesh &mesh, Foam::volScalarField &marker)
         }
     }
 
-    Foam::Info << nFluid << "(fluid) + " << nGhost << "(ghost) + " << nSolid << "(solid) = " << nFluid+nGhost+nSolid << "/" << mesh.nCells() << Foam::endl;
+    Foam::Pout << nFluid << "(fluid) + " << nGhost << "(ghost) + " << nSolid << "(solid) = " << nFluid+nGhost+nSolid << "/" << mesh.nCells() << Foam::endl;
 }
 
 void ibInterp_Dirichlet_Linear(const Foam::vector &p_src, Foam::scalar val_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
