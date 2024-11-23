@@ -51,62 +51,53 @@ const Foam::scalar cGhost = 0.0;
 const Foam::scalar cSolid = -1.0;
 
 /* Flow condition */
-const Foam::scalar Re = 10.0;  // Reynolds number
+const Foam::scalar Re = 40.0;  // Reynolds number
 
 /* Sphere parameter */
-const Foam::vector sphere_c0(2, 2, 1.5);
+const Foam::vector sphere_c0(0, 0, 0);
 const Foam::scalar sphere_r = 0.5;
 
 /* Cartesian grid spacing */
-const Foam::scalar L = 4.0;
-const Foam::label N = 32;
-const Foam::scalar h = L / N;
+const Foam::scalar h = 8.0 / 64;
+const Foam::scalar xMin = -4.0, xMax = 4.0;
+const Foam::scalar yMin = -4.0, yMax = 4.0;
+const Foam::scalar zMin = -4.0, zMax = 12.0;
 
 inline bool isEqual(double x, double y)
 {
     return std::abs(x-y) <= 1e-6 * std::abs(x);
 }
 
-inline double normalizedCoord(double x_, double h_)
+inline double normalizedCoord(double dx_, double h_)
 {
-    return x_ / h_;
+    return dx_ / h_;
 }
 
-inline bool atFullSpacing(double x_, double h_)
+inline bool atFullSpacing(double dx_, double h_)
 {
-    return isEqual(std::remainder(normalizedCoord(x_, h_), 1.0), 0.0);
+    return isEqual(std::remainder(normalizedCoord(dx_, h_), 1.0), 0.0);
 }
 
-inline bool atHalfSpacing(double x_, double h_)
+inline bool atHalfSpacing(double dx_, double h_)
 {
-    return isEqual(std::remainder(normalizedCoord(x_, h_), 0.5), 0.0);
+    return isEqual(std::remainder(normalizedCoord(dx_, h_), 0.5), 0.0);
 }
 
-inline bool isCellCentroid(double x_, double y_, double z_, double h_)
+inline bool isCellCentroid(const Foam::vector &p)
 {
-    return atHalfSpacing(x_, h_) && atHalfSpacing(y_, h_) && atHalfSpacing(z_, h_);
+    return atHalfSpacing(p.x() - xMin, h) && atHalfSpacing(p.y() - yMin, h) && atHalfSpacing(p.z() - zMin, h);
 }
 
-inline bool isCellCentroid(const Foam::vector &p_, double h_)
+inline bool isNode(const Foam::vector &p)
 {
-    return isCellCentroid(p_.x(), p_.y(), p_.z(), h_);
+    return atFullSpacing(p.x() - xMin, h) && atFullSpacing(p.y() - yMin, h) && atFullSpacing(p.z() - zMin, h);
 }
 
-inline bool isNode(double x_, double y_, double z_, double h_)
+void xyz2ijk(double x_, double y_, double z_, int &i_, int &j_, int &k_)
 {
-    return atFullSpacing(x_, h_) && atFullSpacing(y_, h_) && atFullSpacing(z_, h_);
-}
-
-inline bool isNode(const Foam::vector &p_, double h_)
-{
-    return isNode(p_.x(), p_.y(), p_.z(), h_);
-}
-
-void xyz2ijk(double x_, double y_, double z_, double h_, int &i_, int &j_, int &k_)
-{
-    i_ = static_cast<int>(normalizedCoord(x_, h_) + 0.5);
-    j_ = static_cast<int>(normalizedCoord(y_, h_) + 0.5);
-    k_ = static_cast<int>(normalizedCoord(z_, h_) + 0.5);
+    i_ = static_cast<int>(normalizedCoord(x_ - xMin, h) + 0.5);
+    j_ = static_cast<int>(normalizedCoord(y_ - yMin, h) + 0.5);
+    k_ = static_cast<int>(normalizedCoord(z_ - zMin, h) + 0.5);
 }
 
 void update_boundaryField(const Foam::fvMesh &mesh, const Foam::volScalarField &src1, const Foam::volVectorField &src2, Foam::surfaceScalarField &dst)
@@ -298,7 +289,7 @@ void ibInterp_Dirichlet_Linear(const Foam::vector &p_src, Foam::scalar val_src, 
         b[i] = val_adj[i] - val_src;
 
         dx = p_adj[i].x() - p_src.x();
-        dx = p_adj[i].y() - p_src.y();
+        dy = p_adj[i].y() - p_src.y();
         dz = p_adj[i].z() - p_src.z();
 
         A(i, 0) = dx;
@@ -505,7 +496,7 @@ int main(int argc, char *argv[])
     /* Extended stencil  */
     // Processor-boundaries are dealt with automatically
     const Foam::extendedCentredCellToCellStencil& addressing = Foam::centredCPCCellToCellStencilObject::New(mesh_gas);
-    // Foam::Pout << addressing.stencil().size() << "/" << mesh_gas.nCells() << Foam::endl;
+    Foam::Pout << addressing.stencil().size() << "/" << mesh_gas.nCells() << Foam::endl;
 
     // Initialize stencil storage
     Foam::List<Foam::vectorList> sten_pos(mesh_gas.nCells());
@@ -521,11 +512,13 @@ int main(int argc, char *argv[])
 
         /* Interpolation on IB cells */
         {
+            // Collect data
             Foam::List<Foam::vectorList> sten_val_U(mesh_gas.nCells());
             Foam::List<Foam::scalarList> sten_val_p(mesh_gas.nCells());
             addressing.collectData(U, sten_val_U);
             addressing.collectData(p, sten_val_p);
 
+            // Interpolate data
             for (int i = 0; i < mesh_gas.nCells(); i++)
             {
                 if (isEqual(cMarker[i], cGhost))
@@ -539,7 +532,7 @@ int main(int argc, char *argv[])
                     std::vector<Foam::label> idx;
                     for (int j = 0; j < addressing.stencil()[i].size(); j++)
                     {
-                        if (isCellCentroid(sten_pos[i][j], h) && isEqual(sten_ib[i][j], cFluid))
+                        if (isCellCentroid(sten_pos[i][j]) && isEqual(sten_ib[i][j], cFluid))
                             idx.push_back(j);
                     }
                     std::vector<Foam::vector> pos(idx.size());
