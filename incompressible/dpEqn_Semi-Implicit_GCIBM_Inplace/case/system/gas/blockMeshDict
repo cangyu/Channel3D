@@ -14,7 +14,7 @@ FoamFile
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-convertToMeters 1.0; // Scale the domain to 4m x 4m x 4m
+convertToMeters 1.0; // Scale the domain to 8m x 8m x 16m
 
 vertices
 (

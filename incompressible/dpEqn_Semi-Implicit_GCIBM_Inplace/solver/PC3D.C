@@ -520,8 +520,8 @@ int main(int argc, char *argv[])
     #include "createFields.H"
 
     /* compressibleCreatePhi.H */
-    rhoUSn = Foam::fvc::interpolate(rhoU) & mesh_gas.Sf();
-    update_boundaryField(mesh_gas, rho, U, rhoUSn);
+    rhoUSn = Foam::fvc::interpolate(rho*U) & mesh_gas.Sf();
+    setBdryVal(mesh_gas, rho, U, rhoUSn);
 
     /* Initialize */
     {
