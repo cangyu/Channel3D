@@ -43,7 +43,7 @@ const Foam::scalar one_atm = 101325.0;           // Unit: Pa
 const Foam::scalar one_bar = 100000.0;           // Unit: Pa
 const Foam::scalar one_psi = 6894.76;            // Unit: Pa
 const Foam::scalar one_mpa = 1e6;                // Unit: Pa
-const Foam::scalar G0 = 1.4;                     // Specific heat ratio for ideal gas.
+const Foam::scalar G0 = 1.4;                     // Specific heat ratio for ideal gas
 
 /* Classification of gas-phase cells */
 const Foam::scalar cFluid = 1.0;
@@ -62,6 +62,10 @@ const Foam::scalar h = 8.0 / 64;                 // Spacing
 const Foam::scalar xMin = -4.0, xMax = 4.0;      // Range in X-direction
 const Foam::scalar yMin = -4.0, yMax = 4.0;      // Range in Y-direction
 const Foam::scalar zMin = -4.0, zMax = 12.0;     // Range in Z-direction
+
+/* Console */
+const Foam::label nLogOut = 10;
+bool reportNow = false;
 
 inline bool isEqual(double x, double y)
 {
@@ -514,7 +518,7 @@ int main(int argc, char *argv[])
     #include "createTime.H"
 
     /* Load meshes */
-    #include "createMesh.H"
+    #include "createMeshes.H"
 
     /* Create variables */
     #include "createFields.H"
@@ -562,9 +566,11 @@ int main(int argc, char *argv[])
 
     while(runTime.loop())
     {
-        const Foam::dimensionedScalar dt(Foam::dimTime, runTime.deltaTValue());
-        Foam::Info << "\nn=" << runTime.timeIndex() << ", t=" << std::stod(runTime.timeName(), nullptr) << "s, dt=" << dt.value()*s2ms << "ms" << Foam::endl;
+        reportNow = (runTime.timeIndex() % nLogOut == 0);
         runTime.write();
+        const Foam::dimensionedScalar dt(Foam::dimTime, runTime.deltaTValue());
+        if (reportNow)
+            Foam::Info << "\nn=" << runTime.timeIndex() << ", t=" << std::stod(runTime.timeName(), nullptr) << "s, dt=" << dt.value()*s2ms << "ms" << Foam::endl;
 
         /* Interpolation on IB cells */
         {
@@ -619,9 +625,10 @@ int main(int argc, char *argv[])
             /* Semi-implicit iteration */
             bool converged = false;
             int m = 0;
-            while(++m < 5)
+            while(++m <= 5)
             {
-                Foam::Info << "m=" << m << Foam::endl;
+                if (reportNow)
+                    Foam::Info << "m=" << m << Foam::endl;
 
                 /* Predictor */
                 {
@@ -707,12 +714,14 @@ int main(int argc, char *argv[])
 
                     // The incremental pressure-correction
                     diagnose(mesh_gas, meshInfo_gas, dp*cIbMask, eps_1, eps_2, eps_inf);
-                    Foam::Info << "||dp||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
+                    if (reportNow)
+                        Foam::Info << "||dp||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
                     const bool criteria_dp = eps_inf < 1e-2;
 
                     // Continuity
                     diagnose(mesh_gas, meshInfo_gas, Foam::fvc::div(rhoUSn)*cIbMask, eps_1, eps_2, eps_inf);
-                    Foam::Info << "||div(rhoU)||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
+                    if (reportNow)
+                        Foam::Info << "||div(rhoU)||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
                     const bool criteria_div = eps_inf < 1e-3;
 
                     converged = criteria_dp || criteria_div;
@@ -720,20 +729,22 @@ int main(int argc, char *argv[])
                         break;
                 }
             }
-            if (!converged)
+            if (!converged && reportNow)
                 Foam::Info << "Gas-phase failed to converged after semi-implicit iterations!" << Foam::endl;
             
             /* Check range */
             {
                 Foam::scalar vMin, vMax;
-            
+
                 // Velocity magnitude
                 diagnose(mesh_gas, Foam::mag(U)*cIbMask, vMin, vMax);
-                Foam::Info << Foam::nl << "|U|: " << vMin << " ~ " << vMax << Foam::endl;
-                
+                if (reportNow)
+                    Foam::Info << Foam::nl << "|U|: " << vMin << " ~ " << vMax << Foam::endl;
+
                 // Pressure
                 diagnose(mesh_gas, p*cIbMask, vMin, vMax);
-                Foam::Info << "p: " << vMin << " ~ " << vMax << Foam::endl;
+                if (reportNow)
+                    Foam::Info << "p: " << vMin << " ~ " << vMax << Foam::endl;
             }
         }
     }
