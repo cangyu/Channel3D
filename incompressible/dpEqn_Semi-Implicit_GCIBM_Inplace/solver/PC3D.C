@@ -63,10 +63,6 @@ const Foam::scalar xMin = -4.0, xMax = 4.0;      // Range in X-direction
 const Foam::scalar yMin = -4.0, yMax = 4.0;      // Range in Y-direction
 const Foam::scalar zMin = -4.0, zMax = 12.0;     // Range in Z-direction
 
-/* Console */
-const Foam::label nLogOut = 10;
-bool reportNow = false;
-
 inline bool isEqual(double x, double y)
 {
     return std::abs(x-y) <= 1e-6 * std::abs(x);
@@ -554,8 +550,7 @@ int main(int argc, char *argv[])
     }
 
     /* Extended stencil */
-    // Processor-boundaries are dealt with automatically
-    const Foam::extendedCentredCellToCellStencil& addressing = Foam::centredCPCCellToCellStencilObject::New(mesh_gas);
+    const Foam::extendedCentredCellToCellStencil& addressing = Foam::centredCPCCellToCellStencilObject::New(mesh_gas); // Processor-boundaries are dealt with automatically
     Foam::Pout << addressing.stencil().size() << "/" << mesh_gas.nCells() << Foam::endl;
 
     // Initialize stencil storage
@@ -566,11 +561,9 @@ int main(int argc, char *argv[])
 
     while(runTime.loop())
     {
-        reportNow = (runTime.timeIndex() % nLogOut == 0);
         runTime.write();
         const Foam::dimensionedScalar dt(Foam::dimTime, runTime.deltaTValue());
-        if (reportNow)
-            Foam::Info << "\nn=" << runTime.timeIndex() << ", t=" << std::stod(runTime.timeName(), nullptr) << "s, dt=" << dt.value()*s2ms << "ms" << Foam::endl;
+        Foam::Info << "\nn=" << runTime.timeIndex() << ", t=" << std::stod(runTime.timeName(), nullptr) << "s, dt=" << dt.value()*s2ms << "ms" << Foam::endl;
 
         /* Interpolation on IB cells */
         {
@@ -627,8 +620,7 @@ int main(int argc, char *argv[])
             int m = 0;
             while(++m <= 5)
             {
-                if (reportNow)
-                    Foam::Info << "m=" << m << Foam::endl;
+                Foam::Info << "m=" << m << Foam::endl;
 
                 /* Predictor */
                 {
@@ -714,14 +706,12 @@ int main(int argc, char *argv[])
 
                     // The incremental pressure-correction
                     diagnose(mesh_gas, meshInfo_gas, dp*cIbMask, eps_1, eps_2, eps_inf);
-                    if (reportNow)
-                        Foam::Info << "||dp||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
+                    Foam::Info << "||dp||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
                     const bool criteria_dp = eps_inf < 1e-2;
 
                     // Continuity
                     diagnose(mesh_gas, meshInfo_gas, Foam::fvc::div(rhoUSn)*cIbMask, eps_1, eps_2, eps_inf);
-                    if (reportNow)
-                        Foam::Info << "||div(rhoU)||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
+                    Foam::Info << "||div(rhoU)||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
                     const bool criteria_div = eps_inf < 1e-3;
 
                     converged = criteria_dp || criteria_div;
@@ -729,7 +719,7 @@ int main(int argc, char *argv[])
                         break;
                 }
             }
-            if (!converged && reportNow)
+            if (!converged)
                 Foam::Info << "Gas-phase failed to converged after semi-implicit iterations!" << Foam::endl;
             
             /* Check range */
@@ -738,13 +728,11 @@ int main(int argc, char *argv[])
 
                 // Velocity magnitude
                 diagnose(mesh_gas, Foam::mag(U)*cIbMask, vMin, vMax);
-                if (reportNow)
-                    Foam::Info << Foam::nl << "|U|: " << vMin << " ~ " << vMax << Foam::endl;
+                Foam::Info << Foam::nl << "|U|: " << vMin << " ~ " << vMax << Foam::endl;
 
                 // Pressure
                 diagnose(mesh_gas, p*cIbMask, vMin, vMax);
-                if (reportNow)
-                    Foam::Info << "p: " << vMin << " ~ " << vMax << Foam::endl;
+                Foam::Info << "p: " << vMin << " ~ " << vMax << Foam::endl;
             }
         }
     }

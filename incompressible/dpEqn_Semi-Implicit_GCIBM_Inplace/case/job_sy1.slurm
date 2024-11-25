@@ -1,13 +1,19 @@
 #!/bin/bash
 
-#SBATCH --job-name=icoCh3Re40
-#SBATCH --partition=cpu
+#SBATCH --job-name=iC3R40
+#SBATCH --partition=debug64c512g
 #SBATCH -n 16
 #SBATCH --ntasks-per-node=16
 #SBATCH --output=%j.out
 #SBATCH --error=%j.err
 #SBATCH --mail-type=end
 #SBATCH --mail-user=yu.cang@sjtu.edu.cn
+
+# ENV
+module load gcc/11.2.0
+module load openmpi/4.1.5-gcc-11.2.0
+module load eigen/3.4.0-gcc-11.2.0
+module load openfoam-org/8-gcc-11.2.0
 
 # CLEAN
 wclean ../solver
