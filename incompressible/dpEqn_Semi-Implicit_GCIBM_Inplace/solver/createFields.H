@@ -26,7 +26,7 @@ Foam::volScalarField dp // Pressure incremental correction, Unit: Pa
 
 Foam::volScalarField mu // Viscosity, Unit: kg/m/s
 (
-    Foam::IOobject("mu", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::NO_WRITE),
+    Foam::IOobject("mu", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
     mesh_gas,
     Foam::dimensionedScalar(Foam::dimDynamicViscosity, Foam::Zero),
     "zeroGradient"
@@ -64,7 +64,7 @@ Foam::volVectorField grad_p
 /* Surface variables */
 Foam::surfaceScalarField rhoUSn // Mass flow rate, Unit: kg/s
 (
-    Foam::IOobject("rhoUSn", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
+    Foam::IOobject("rhoUSn", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::NO_WRITE),
     mesh_gas,
     Foam::dimensionedScalar(Foam::dimDensity*Foam::dimVelocity*Foam::dimArea, Foam::Zero)
 );
