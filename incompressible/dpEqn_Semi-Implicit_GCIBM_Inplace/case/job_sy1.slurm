@@ -1,9 +1,9 @@
 #!/bin/bash
 
-#SBATCH --job-name=iC3R40
-#SBATCH --partition=debug64c512g
-#SBATCH -n 16
-#SBATCH --ntasks-per-node=16
+#SBATCH --job-name=iSR40
+#SBATCH --partition=64c512g
+#SBATCH -n 32
+#SBATCH --ntasks-per-node=32
 #SBATCH --output=%j.out
 #SBATCH --error=%j.err
 #SBATCH --mail-type=end
@@ -31,4 +31,3 @@ decomposePar -region gas
 
 # RUN
 srun --mpi=pmi2 ../solver/PC3D -parallel
-
