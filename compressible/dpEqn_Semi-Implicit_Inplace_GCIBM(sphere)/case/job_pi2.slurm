@@ -17,6 +17,7 @@ module load openfoam-org/8-gcc-11.2.0
 
 # CLEAN
 wclean ../solver
+
 rm -rf ../solver/PC3D
 rm -rf processor*
 rm -rf constant/*/polyMesh
