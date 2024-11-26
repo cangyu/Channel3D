@@ -37,12 +37,12 @@ boundaryField
 
     FRONT
     {
-        type            empty;
+        type            zeroGradient;
     }
 
     BACK
     {
-        type            empty;
+        type            zeroGradient;
     }
 
     LEFT

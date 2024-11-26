@@ -72,7 +72,7 @@ const Foam::vector sphere_c0(0, 0, 0);           // Centroid
 const Foam::scalar sphere_r = 0.5;               // Radius
 
 /* Cartesian grid */
-const Foam::scalar h = 8.0 / 80;                 // Spacing
+const Foam::scalar h = 8.0 / 64;                 // Spacing
 const Foam::scalar xMin = -4.0, xMax = 4.0;      // Range in X-direction
 const Foam::scalar yMin = -4.0, yMax = 4.0;      // Range in Y-direction
 const Foam::scalar zMin = -4.0, zMax = 12.0;     // Range in Z-direction

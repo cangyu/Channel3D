@@ -53,15 +53,39 @@ boundary
         );
     }
 
-    AROUND
+    FRONT
+    {
+        type wall;
+        faces
+        (
+            (1 5 4 0)
+        );
+    }
+
+    BACK
+    {
+        type wall;
+        faces
+        (
+            (3 7 6 2)
+        );
+    }
+
+    LEFT
     {
         type wall;
         faces
         (
             (0 4 7 3)
+        );
+    }
+
+    RIGHT
+    {
+        type wall;
+        faces
+        (
             (2 6 5 1)
-            (1 5 4 0)
-            (3 7 6 2)
         );
     }
 );
