@@ -2,8 +2,8 @@
 
 #SBATCH --job-name=cSR40
 #SBATCH --partition=64c512g
-#SBATCH -n 4
-#SBATCH --ntasks-per-node=4
+#SBATCH -n 16
+#SBATCH --ntasks-per-node=16
 #SBATCH --output=%j.out
 #SBATCH --error=%j.err
 #SBATCH --mail-type=end

@@ -2,8 +2,8 @@
 
 #SBATCH --job-name=cSR40
 #SBATCH --partition=cpu
-#SBATCH -n 4
-#SBATCH --ntasks-per-node=4
+#SBATCH -n 16
+#SBATCH --ntasks-per-node=16
 #SBATCH --output=%j.out
 #SBATCH --error=%j.err
 #SBATCH --mail-type=end
@@ -31,4 +31,4 @@ blockMesh -region gas
 decomposePar -region gas
 
 # RUN
-mpiexec -n 4 ../solver/PC3D -parallel
+mpiexec -n 16 ../solver/PC3D -parallel
