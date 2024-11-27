@@ -72,51 +72,54 @@ const Foam::vector sphere_c0(0, 0, 0);           // Centroid
 const Foam::scalar sphere_r = 0.5;               // Radius
 
 /* Cartesian grid */
-const Foam::scalar h = 8.0 / 64;                 // Spacing
 const Foam::scalar xMin = -4.0, xMax = 4.0;      // Range in X-direction
 const Foam::scalar yMin = -4.0, yMax = 4.0;      // Range in Y-direction
 const Foam::scalar zMin = -4.0, zMax = 12.0;     // Range in Z-direction
+const Foam::scalar h = 8.0 / 64;                 // Spacing
+const Foam::scalar h_inv = 1.0 / h;
 
 inline bool isEqual(double x, double y)
 {
-  return std::abs(x-y) <= 1e-6 * std::abs(x);
+    return std::islessequal(std::abs(x-y), 1e-5 * std::abs(x));
 }
 
-inline double normalizedCoord(double dx_, double h_)
+inline bool isZero(double x)
 {
-    return dx_ / h_;
+    return std::isless(std::abs(x), 1e-7);
 }
 
-inline bool atFullSpacing(double dx_, double h_)
+inline bool atFullSpacing(double x_, double x0_, double h_)
 {
-    return isEqual(std::remainder(normalizedCoord(dx_, h_), 1.0), 0.0);
+    const double idx = (x_ - x0_) / h_;
+    const double res = std::fmod(idx, 1.0);
+    return isZero(res) || isEqual(res, 1.0);
 }
 
-inline bool atHalfSpacing(double dx_, double h_)
+inline bool atHalfSpacing(double x_, double x0_, double h_)
 {
-    return isEqual(std::remainder(normalizedCoord(dx_, h_), 0.5), 0.0);
+    const double idx = (x_ - x0_) / h_;
+    const double res = std::fmod(idx, 1.0);
+    return isEqual(res, 0.5);
 }
 
 inline bool isCellCentroid(const Foam::vector &p)
 {
-    return atHalfSpacing(p.x() - xMin, h) && atHalfSpacing(p.y() - yMin, h) && atHalfSpacing(p.z() - zMin, h);
+    return atHalfSpacing(p.x(), xMin, h) && atHalfSpacing(p.y(), yMin, h) && atHalfSpacing(p.z(), zMin, h);
 }
 
 inline bool isNode(const Foam::vector &p)
 {
-    return atFullSpacing(p.x() - xMin, h) && atFullSpacing(p.y() - yMin, h) && atFullSpacing(p.z() - zMin, h);
-}
-
-inline void xyz2ijk(double x_, double y_, double z_, double h_, int &i_, int &j_, int &k_)
-{
-    i_ = static_cast<int>(normalizedCoord(x_ - xMin, h_) + 0.5);
-    j_ = static_cast<int>(normalizedCoord(y_ - yMin, h_) + 0.5);
-    k_ = static_cast<int>(normalizedCoord(z_ - zMin, h_) + 0.5);
+    return atFullSpacing(p.x(), xMin, h) && atFullSpacing(p.y(), yMin, h) && atFullSpacing(p.z(), zMin, h);
 }
 
 inline void xyz2ijk(const Foam::vector &p_, int &i_, int &j_, int &k_)
 {
-    xyz2ijk(p_.x(), p_.y(), p_.z(), h, i_, j_, k_);
+    const double dx = p_.x() - xMin;
+    const double dy = p_.y() - yMin;
+    const double dz = p_.z() - zMin;
+    i_ = static_cast<int>(std::fma(dx, h_inv, 0.5));
+    j_ = static_cast<int>(std::fma(dy, h_inv, 0.5));
+    k_ = static_cast<int>(std::fma(dz, h_inv, 0.5));
 }
 
 void setBdryVal(const Foam::fvMesh &mesh, const Foam::volScalarField &src1, const Foam::volVectorField &src2, Foam::surfaceScalarField &dst)
@@ -153,7 +156,7 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::globalMeshData &meshInfo, co
     maxVal = std::numeric_limits<double>::min();
     for (int i = 0; i < mesh.nCells(); i++)
     {
-        if (isEqual(flag[i], 0.0))
+        if (isZero(flag[i]))
             continue;
 
         const double cVal = std::abs(src[i]);
@@ -177,7 +180,7 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::globalMeshData &meshInfo, co
     norm1 = norm2 = normInf = 0.0;
     for (int i = 0; i < mesh.nCells(); i++)
     {
-        if (isEqual(flag[i], 0.0))
+        if (isZero(flag[i]))
             continue;
 
         const double cVal = std::abs(src[i]);
@@ -198,7 +201,7 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
     maxVal = std::numeric_limits<double>::min();
     for (int i = 0; i < mesh.nCells(); i++)
     {
-        if (isEqual(flag[i], 0.0))
+        if (isZero(flag[i]))
             continue;
 
         minVal = std::min(minVal, src[i]);
@@ -549,7 +552,7 @@ int main(int argc, char *argv[])
     #include "createFields.H"
 
     /* Initialize */
-    {   
+    {
         // Density
         rho = p / Rg / T;
         rho.correctBoundaryConditions();
@@ -772,8 +775,7 @@ int main(int argc, char *argv[])
                         Foam::fvm::Sp(1.0/(dt * Rg * T), dp) - dt * Foam::fvm::laplacian(dp) == -(Foam::fvc::div(rhoUSn) + Foam::fvc::ddt(rho))
                     );
 
-                    // For both solid and ghost cells,
-                    // set the incremental pressure-correction to zero.
+                    // For both solid and ghost cells, set the incremental pressure-correction to zero.
                     {
                         Foam::scalarList val;
                         Foam::labelList idx;
@@ -792,7 +794,7 @@ int main(int argc, char *argv[])
                     // Solve
                     dpEqn.solve();
                 }
-                
+
                 /* Update */
                 {
                     p += dp;
@@ -828,22 +830,21 @@ int main(int argc, char *argv[])
         }
         if (!converged)
             Foam::Info << Foam::nl  << "Gas-phase failed to converged after " << m << " semi-implicit iterations!" << Foam::endl;
-        
+
         /* Check range */
         {
             Foam::scalar eps_inf, eps_1, eps_2;
             Foam::scalar vMin, vMax;
 
-            Foam::Info << Foam::nl;
-
             // Density
             diagnose(mesh_gas, rho, cIbMask, vMin, vMax);
+            Foam::Info << Foam::nl;
             Foam::Info << "rho: " << vMin << " ~ " << vMax << Foam::endl;
 
             // Velocity magnitude
             diagnose(mesh_gas, Foam::mag(U), cIbMask, vMin, vMax);
             Foam::Info << "|U|: " << vMin << " ~ " << vMax << Foam::endl;
-            
+
             // Pressure fluctuation
             diagnose(mesh_gas, p, cIbMask, vMin, vMax);
             Foam::Info << "p-p0: " << vMin-p0 << " ~ " << vMax-p0 << Foam::endl;
