@@ -2,8 +2,8 @@
 
 #SBATCH --job-name=iSR40
 #SBATCH --partition=64c512g
-#SBATCH -n 32
-#SBATCH --ntasks-per-node=32
+#SBATCH -n 16
+#SBATCH --ntasks-per-node=16
 #SBATCH --output=%j.out
 #SBATCH --error=%j.err
 #SBATCH --mail-type=end
