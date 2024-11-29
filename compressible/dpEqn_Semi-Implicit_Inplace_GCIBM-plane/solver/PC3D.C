@@ -648,16 +648,13 @@ int main(int argc, char *argv[])
                     // Velocity
                     ibInterp_Dirichlet_Linear(p_BI, 0.0, pos, val_ux, mesh_gas.C()[i], U[i].x());
                     ibInterp_Dirichlet_Linear(p_BI, 0.0, pos, val_uy, mesh_gas.C()[i], U[i].y());
-                    ibInterp_Dirichlet_Linear(p_BI, 0.0, pos, val_uz, mesh_gas.C()[i], U[i].z());
+                    ibInterp_Dirichlet_Linear(p_BI, 1.0, pos, val_uz, mesh_gas.C()[i], U[i].z());
 
                     // Pressure
                     ibInterp_zeroGradient_Linear(p_BI, n_BI, pos, val_p, mesh_gas.C()[i], p[i]);
 
                     // Temperature
                     ibInterp_Dirichlet_Linear(p_BI, plane_T, pos, val_T, mesh_gas.C()[i], T[i]);
-                    // ibInterp_zeroGradient_Linear(p_BI, n_BI, pos, val_T, mesh_gas.C()[i], T[i]);
-                    // ibInterp_Neumann_Linear(p_BI, n_BI, -2500.0, pos, val_T, mesh_gas.C()[i], T[i]);
-                    // ibInterp_Robin_Linear(p_BI, n_BI, 2.0, 10.0, 8000.0, pos, val_T, mesh_gas.C()[i], T[i]);
                 }
             }
         }
@@ -822,7 +819,7 @@ int main(int argc, char *argv[])
                 Foam::Info << "||rho_next-rho*||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
                 const bool criteria_drho = eps_inf < 1e-3 || eps_1 < 1e-5 || eps_2 < 1e-6;
 
-                converged = criteria_dp || criteria_drho;
+                converged = criteria_dp && criteria_drho;
                 if (converged && m > 1)
                     break;
             }
