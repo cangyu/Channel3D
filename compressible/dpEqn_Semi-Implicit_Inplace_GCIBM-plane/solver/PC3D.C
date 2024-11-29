@@ -67,15 +67,15 @@ const Foam::scalar Pr = 0.71;                    // Prandtl number
 const Foam::scalar p0 = 101325.0;                // Ambient pressure
 const Foam::scalar T0 = 300.0;                   // Initial temperature
 
-/* Sphere geom */
-const Foam::vector sphere_c0(0, 0, 0);           // Centroid
-const Foam::scalar sphere_r = 0.5;               // Radius
+/* Plane param */
+const Foam::scalar plane_z = 0.25e-3;            // Vertical position
+const Foam::scalar plane_T = 300.0;              // Temperature
 
 /* Cartesian grid */
-const Foam::scalar xMin = -4.0, xMax = 4.0;      // Range in X-direction
-const Foam::scalar yMin = -4.0, yMax = 4.0;      // Range in Y-direction
-const Foam::scalar zMin = -4.0, zMax = 12.0;     // Range in Z-direction
-const Foam::scalar h = 8.0 / 64;                 // Spacing
+const Foam::scalar xMin = 0.0, xMax = 0.5e-3;    // Range in X-direction
+const Foam::scalar yMin = 0.0, yMax = 0.5e-3;    // Range in Y-direction
+const Foam::scalar zMin = 0.0, zMax = 1.0e-3;    // Range in Z-direction
+const Foam::scalar h = 0.5e-3 / 32;              // Spacing
 const Foam::scalar h_inv = 1.0 / h;
 
 inline bool isEqual(double x, double y)
@@ -213,7 +213,7 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
 
 inline double distToSurf(const Foam::vector &c)
 {
-    return Foam::mag(c-sphere_c0) - sphere_r;
+    return c.z() - plane_z;
 }
 
 inline bool pntInFluid(const Foam::vector &c)
@@ -620,9 +620,8 @@ int main(int argc, char *argv[])
                 if (isEqual(cIbMarker[i], cGhost))
                 {
                     // Position and normal of the Boundary Intersection point
-                    Foam::vector p_BI = mesh_gas.C()[i] - sphere_c0;
-                    Foam::vector n_BI = p_BI / Foam::mag(p_BI);
-                    p_BI = sphere_c0 + n_BI * sphere_r;
+                    const Foam::vector p_BI(mesh_gas.C()[i].x(), mesh_gas.C()[i].y(), plane_z);
+                    const Foam::vector n_BI(0.0, 0.0, 1.0);
 
                     // Extract neighborhood data
                     std::vector<Foam::label> idx;
@@ -655,7 +654,7 @@ int main(int argc, char *argv[])
                     ibInterp_zeroGradient_Linear(p_BI, n_BI, pos, val_p, mesh_gas.C()[i], p[i]);
 
                     // Temperature
-                    ibInterp_Dirichlet_Linear(p_BI, 800.0, pos, val_T, mesh_gas.C()[i], T[i]);
+                    ibInterp_Dirichlet_Linear(p_BI, plane_T, pos, val_T, mesh_gas.C()[i], T[i]);
                     // ibInterp_zeroGradient_Linear(p_BI, n_BI, pos, val_T, mesh_gas.C()[i], T[i]);
                     // ibInterp_Neumann_Linear(p_BI, n_BI, -2500.0, pos, val_T, mesh_gas.C()[i], T[i]);
                     // ibInterp_Robin_Linear(p_BI, n_BI, 2.0, 10.0, 8000.0, pos, val_T, mesh_gas.C()[i], T[i]);

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name=cSR40
+#SBATCH --job-name=PC3D
 #SBATCH --partition=cpu
 #SBATCH -n 16
 #SBATCH --ntasks-per-node=16

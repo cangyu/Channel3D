@@ -35,8 +35,8 @@ solvers
     dp
     {
         solver          PCG;
-        preconditioner  DIC;
-        tolerance       1e-09;
+        preconditioner  FDIC;
+        tolerance       1e-07;
         relTol          0;
     }
 }
