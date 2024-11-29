@@ -601,7 +601,7 @@ int main(int argc, char *argv[])
     while(runTime.loop())
     {
         const Foam::dimensionedScalar dt(Foam::dimTime, runTime.deltaTValue());
-        Foam::Info << "\nn=" << runTime.timeIndex() << ", t=" << std::stod(runTime.timeName(), nullptr) << "s, dt=" << dt.value()*s2ms << "ms" << Foam::endl;
+        Foam::Info << "\nn=" << runTime.timeIndex() << ", t=" << std::stod(runTime.timeName(), nullptr)*s2ms << "ms, dt=" << dt.value()*s2ns << "ns" << Foam::endl;
         runTime.write();
 
         /* Interpolation on IB cells */
