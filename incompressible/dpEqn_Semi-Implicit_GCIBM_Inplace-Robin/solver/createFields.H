@@ -24,7 +24,7 @@ Foam::volScalarField Cf // Species concentration@(n), Unit: mol/m^3
 (
     Foam::IOobject("Cf", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
     mesh_gas,
-    Foam::dimensionedScalar(Foam::dimMoles/Foam::dimVolume, 10e3),
+    Foam::dimensionedScalar(Foam::dimMoles/Foam::dimVolume, 10),
     "zeroGradient"
 );
 
@@ -32,22 +32,6 @@ Foam::volScalarField dp // Pressure incremental correction, Unit: Pa
 (
     Foam::IOobject("dp", runTime.timeName(), mesh_gas, Foam::IOobject::MUST_READ, Foam::IOobject::NO_WRITE),
     mesh_gas
-);
-
-Foam::volScalarField nu // Kinematic viscosity, Unit: m^2/s
-(
-    Foam::IOobject("nu", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
-    mesh_gas,
-    Foam::dimensionedScalar(Foam::dimArea/Foam::dimTime, 2e-5),
-    "zeroGradient"
-);
-
-Foam::volScalarField D // Species diffusivity, Unit: m^2/s
-(
-    Foam::IOobject("D", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
-    mesh_gas,
-    Foam::dimensionedScalar(Foam::dimArea/Foam::dimTime, 2e-5),
-    "zeroGradient"
 );
 
 Foam::volScalarField phi // Level-Set function defined as signed-distance, Unit: m

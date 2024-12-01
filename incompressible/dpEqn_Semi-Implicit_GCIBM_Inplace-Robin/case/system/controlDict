@@ -23,13 +23,13 @@ startTime       0;
 
 stopAt          endTime;
 
-endTime         200;
+endTime         1;
 
 deltaT          5e-4;
 
 writeControl    timeStep;
 
-writeInterval   1000;
+writeInterval   16;
 
 purgeWrite      0;
 

@@ -50,17 +50,29 @@ const Foam::scalar cFluid = 1.0;                 // Fluid cell
 const Foam::scalar cGhost = 0.0;                 // Ghost cell
 const Foam::scalar cSolid = -1.0;                // Solid cell
 
-/* Sphere geom */
-const Foam::vector sphere_c0(0, 0, 0);           // Centroid
-const Foam::scalar sphere_r = 0.005;             // Radius. Unit: m
-
 /* Cartesian grid */
 const Foam::scalar L = 0.04;
 const Foam::scalar xMin = -L/2, xMax = L/2;      // Range in X-direction
 const Foam::scalar yMin = -L/2, yMax = L/2;      // Range in Y-direction
 const Foam::scalar zMin = -L/2, zMax = L/2;      // Range in Z-direction
-const Foam::scalar h = L / 32;                   // Spacing
+const Foam::scalar h = L / 100;                   // Spacing
 const Foam::scalar h_inv = 1.0 / h;
+
+/* Sphere geom */
+const Foam::vector sphere_c0(0, 0, 0);           // Centroid
+const Foam::scalar sphere_r = 0.005;             // Radius. Unit: m
+
+/* Flow condition */
+const Foam::scalar Da = 1.0;                     // Damkohler number
+
+// Kinematic viscosity, Unit: m^2/s
+const Foam::dimensionedScalar nu(Foam::dimArea/Foam::dimTime, 2e-5);
+
+// Species diffusivity, Unit: m^2/s
+const Foam::dimensionedScalar D(Foam::dimArea/Foam::dimTime, 2e-5);
+
+// Surface reaction rate coefficient, Unit: m/s
+const Foam::dimensionedScalar k(Foam::dimLength/Foam::dimTime, Da * D.value() / sphere_r);
 
 inline bool isEqual(double x, double y)
 {
@@ -567,7 +579,10 @@ int main(int argc, char *argv[])
     while(runTime.loop())
     {
         const Foam::dimensionedScalar dt(Foam::dimTime, runTime.deltaTValue());
-        Foam::Info << "\nn=" << runTime.timeIndex() << ", t=" << std::stod(runTime.timeName(), nullptr) << "s, dt=" << dt.value()*s2ms << "ms" << Foam::endl;
+        const Foam::label n = runTime.timeIndex();
+        const Foam::scalar t = std::stod(runTime.timeName(), nullptr);
+        const Foam::scalar Fo = D.value() / sphere_r * t / sphere_r;
+        Foam::Info << "\nn=" << n << ", t=" << t << "s, Fo=" << Fo << ", dt=" << dt.value()*s2ms << "ms" << Foam::endl;
         runTime.write();
 
         /* Interpolation on IB cells */
@@ -621,7 +636,7 @@ int main(int argc, char *argv[])
                     ibInterp_zeroGradient_Linear(p_BI, n_BI, pos, val_p, mesh_gas.C()[i], p[i]);
 
                     // Species concentration
-                    ibInterp_zeroGradient_Linear(p_BI, n_BI, pos, val_Cf, mesh_gas.C()[i], Cf[i]);
+                    ibInterp_Robin_Linear(p_BI, n_BI, D.value(), -k.value(), 0.0, pos, val_Cf, mesh_gas.C()[i], Cf[i]);
                 }
             }
         }
@@ -786,6 +801,10 @@ int main(int argc, char *argv[])
                 // Pressure
                 diagnose(mesh_gas, p, cIbMask, vMin, vMax);
                 Foam::Info << "p: " << vMin << " ~ " << vMax << Foam::endl;
+
+                // Species concentration
+                diagnose(mesh_gas, Cf, cIbMask, vMin, vMax);
+                Foam::Info << "Cf: " << vMin << " ~ " << vMax << Foam::endl;
             }
         }
     }
