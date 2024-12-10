@@ -666,7 +666,7 @@ int main(int argc, char *argv[])
         /* Update gas-phase by semi-implicit iteration */
         bool converged = false;
         int m = 0;
-        while(++m <= 5)
+        while(++m <= 3)
         {
             Foam::Info << "m=" << m << Foam::endl;
 
@@ -817,11 +817,11 @@ int main(int argc, char *argv[])
 
                 diagnose(mesh_gas, meshInfo_gas, dp, cIbMask, eps_1, eps_2, eps_inf);
                 Foam::Info << "||dp||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
-                const bool criteria_dp = eps_inf < 1e-2;
+                const bool criteria_dp = eps_inf < 1e-3 * p0 && eps_1 < 1e-6 * p0 && eps_2 < 1e-4 * p0;
 
                 diagnose(mesh_gas, meshInfo_gas, rho-rho_star, cIbMask, eps_1, eps_2, eps_inf);
                 Foam::Info << "||rho_next-rho*||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
-                const bool criteria_drho = eps_inf < 1e-3 || eps_1 < 1e-5 || eps_2 < 1e-6;
+                const bool criteria_drho = eps_inf < 1e-3 || eps_1 < 1e-6 || eps_2 < 1e-5;
 
                 converged = criteria_dp && criteria_drho;
                 if (converged && m > 1)
@@ -829,7 +829,7 @@ int main(int argc, char *argv[])
             }
         }
         if (!converged)
-            Foam::Info << Foam::nl  << "Gas-phase failed to converged after " << m << " semi-implicit iterations!" << Foam::endl;
+            Foam::Info << Foam::nl  << "Gas-phase failed to converged after " << m-1 << " semi-implicit iterations!" << Foam::endl;
 
         /* Check range */
         {
