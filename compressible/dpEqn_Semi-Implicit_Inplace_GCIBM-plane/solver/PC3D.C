@@ -62,9 +62,8 @@ const Foam::scalar cGhost = 0.0;                 // Ghost cell
 const Foam::scalar cSolid = -1.0;                // Solid cell
 
 /* Flow condition */
-const Foam::scalar Re = 40.0;                    // Reynolds number
 const Foam::scalar Pr = 0.71;                    // Prandtl number
-const Foam::scalar p0 = 101325.0;                // Ambient pressure
+const Foam::scalar p0 = 2.07 * one_mpa;          // Ambient pressure
 const Foam::scalar T0 = 300.0;                   // Initial temperature
 
 /* Plane param */
@@ -540,6 +539,13 @@ void ibInterp_Robin_Linear(const Foam::vector &p_src, const Foam::vector &n_src,
     val_dst = val_img - snGrad * d;
 }
 
+void calc_gas_property(double T, double &lambda_, double &mu_, double &Cp_)
+{
+    lambda_ = 1.08e-4 * T + 0.0133;              // Unit: W/m/K
+    Cp_ = 0.3 * kcal2J;                          // Unit: J/kg/K
+    mu_ = Pr * lambda_ / Cp_;                    // Unit: kg/m/s
+}
+
 int main(int argc, char *argv[])
 {
     #include "setRootCase.H"
@@ -566,9 +572,7 @@ int main(int argc, char *argv[])
         // Properties
         for (int i = 0; i < mesh_gas.nCells(); i++)
         {
-            mu[i] = rho[i] / Re;                 // Unit: kg/m/s. (D=1m, U=1m/s by default)
-            Cp[i] = 0.3 * kcal2J;                // Unit: J/kg/K
-            lambda[i] = mu[i] * Cp[i] / Pr;      // Unit: W/m/K
+            calc_gas_property(T[i], lambda[i], mu[i], Cp[i]);
         }
         mu.correctBoundaryConditions();
         Cp.correctBoundaryConditions();

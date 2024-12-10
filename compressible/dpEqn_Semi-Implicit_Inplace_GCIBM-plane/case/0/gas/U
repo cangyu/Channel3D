@@ -29,7 +29,7 @@ boundaryField
         psi             thermo:psi;
         gamma           1.4;
         fieldInf        (0 0 0);
-        lInf            10;
+        lInf            10e-3;
         value           $internalField;
     }
 

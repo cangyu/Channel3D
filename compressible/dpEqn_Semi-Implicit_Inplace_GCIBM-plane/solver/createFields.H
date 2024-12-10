@@ -2,8 +2,10 @@ Foam::Info << "Create field variables" << Foam::nl << Foam::endl;
 
 Foam::volScalarField rho // Density@(n), Unit: kg/m^3
 (
-    Foam::IOobject("rho", runTime.timeName(), mesh_gas, Foam::IOobject::MUST_READ, Foam::IOobject::AUTO_WRITE),
-    mesh_gas
+    Foam::IOobject("rho", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
+    mesh_gas,
+    Foam::dimensionedScalar(Foam::dimDensity, 1.0),
+    "zeroGradient"
 );
 
 Foam::volScalarField rho_star // Provisional density, Unit: kg/m^3
@@ -40,7 +42,7 @@ Foam::volScalarField mu // Viscosity, Unit: kg/m/s
 (
     Foam::IOobject("mu", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
     mesh_gas,
-    Foam::dimensionedScalar(Foam::dimDynamicViscosity, Foam::Zero),
+    Foam::dimensionedScalar(Foam::dimDynamicViscosity, 0.0),
     "zeroGradient"
 );
 
@@ -48,7 +50,7 @@ Foam::volScalarField Cp // Constant-pressure specific heat, Unit: J/kg/K
 (
     Foam::IOobject("Cp", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
     mesh_gas,
-    Foam::dimensionedScalar(Foam::dimSpecificHeatCapacity, Foam::Zero),
+    Foam::dimensionedScalar(Foam::dimSpecificHeatCapacity, 0.0),
     "zeroGradient"
 );
 
@@ -56,7 +58,7 @@ Foam::volScalarField lambda // Conductivity, Unit: W/m/K
 (
     Foam::IOobject("lambda", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
     mesh_gas,
-    Foam::dimensionedScalar(Foam::dimPower/Foam::dimLength/Foam::dimTemperature, Foam::Zero),
+    Foam::dimensionedScalar(Foam::dimPower/Foam::dimLength/Foam::dimTemperature, 0.0),
     "zeroGradient"
 );
 
@@ -88,7 +90,7 @@ Foam::volVectorField grad_p
 (
     Foam::IOobject("grad_p", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::NO_WRITE),
     mesh_gas,
-    Foam::dimensionedVector(Foam::dimPressure/Foam::dimLength, Foam::Zero)
+    Foam::dimensionedVector(Foam::dimPressure/Foam::dimLength, Foam::vector(0.0, 0.0, 0.0))
 );
 
 /* Surface variables */
@@ -96,14 +98,14 @@ Foam::surfaceScalarField rhoUSn // Mass flux, Unit: kg/s
 (
     Foam::IOobject("rhoUSn", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::NO_WRITE),
     mesh_gas,
-    Foam::dimensionedScalar(Foam::dimDensity*Foam::dimVelocity*Foam::dimArea, Foam::Zero)
+    Foam::dimensionedScalar(Foam::dimDensity*Foam::dimVelocity*Foam::dimArea, 0.0)
 );
 
 Foam::surfaceScalarField USn // Volume flux, Unit: m^3/s
 (
     Foam::IOobject("USn", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::NO_WRITE),
     mesh_gas,
-    Foam::dimensionedScalar(Foam::dimVelocity*Foam::dimArea, Foam::Zero)
+    Foam::dimensionedScalar(Foam::dimVelocity*Foam::dimArea, 0.0)
 );
 
 /* Thermophysical properties */

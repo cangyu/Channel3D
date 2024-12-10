@@ -16,7 +16,7 @@ FoamFile
 
 dimensions      [1 -1 -2 0 0 0 0];
 
-internalField   uniform 101325.0;
+internalField   uniform 2.07e6;
 
 boundaryField
 {
@@ -28,8 +28,8 @@ boundaryField
         rho             rho;
         psi             thermo:psi;
         gamma           1.4;
-        fieldInf        101325.0;
-        lInf            10;
+        fieldInf        2.07e6;
+        lInf            10e-3;
         value           $internalField;
     }
 
