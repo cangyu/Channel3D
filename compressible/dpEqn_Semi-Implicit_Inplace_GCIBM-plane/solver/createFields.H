@@ -26,7 +26,7 @@ Foam::volScalarField p // Pressure@(n), Unit: Pa
     mesh_gas
 );
 
-Foam::volScalarField dp // Pressure incremental correction, Unit: Pa
+Foam::volScalarField dp // Incremental pressure-correction, Unit: Pa
 (
     Foam::IOobject("dp", runTime.timeName(), mesh_gas, Foam::IOobject::MUST_READ, Foam::IOobject::NO_WRITE),
     mesh_gas
