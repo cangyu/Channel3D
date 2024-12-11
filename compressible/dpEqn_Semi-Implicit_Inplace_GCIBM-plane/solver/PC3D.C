@@ -821,7 +821,7 @@ int main(int argc, char *argv[])
                 const bool criteria_dp = eps_inf < 1e-3 * p0 && eps_1 < 1e-6 * p0 && eps_2 < 1e-4 * p0;
 
                 diagnose(mesh_gas, meshInfo_gas, rho-rho_star, cIbMask, eps_1, eps_2, eps_inf);
-                Foam::Info << "||rho^(m+1)-rho*||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
+                Foam::Info << "||rho^(m)-rho*||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
                 const bool criteria_drho = eps_inf < 1e-3 || eps_1 < 1e-6 || eps_2 < 1e-5;
 
                 converged = criteria_dp && criteria_drho;
@@ -838,8 +838,7 @@ int main(int argc, char *argv[])
 
             // Density
             diagnose(mesh_gas, rho, cIbMask, vMin, vMax);
-            Foam::Info << Foam::nl;
-            Foam::Info << "rho: " << vMin << " ~ " << vMax << Foam::endl;
+            Foam::Info << "\nrho: " << vMin << " ~ " << vMax << Foam::endl;
 
             // Velocity magnitude
             diagnose(mesh_gas, Foam::mag(U), cIbMask, vMin, vMax);
