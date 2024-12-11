@@ -2,10 +2,8 @@ Foam::Info << "Create field variables" << Foam::nl << Foam::endl;
 
 Foam::volScalarField rho // Density@(n), Unit: kg/m^3
 (
-    Foam::IOobject("rho", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
-    mesh_gas,
-    Foam::dimensionedScalar(Foam::dimDensity, 1.0),
-    "zeroGradient"
+    Foam::IOobject("rho", runTime.timeName(), mesh_gas, Foam::IOobject::MUST_READ, Foam::IOobject::AUTO_WRITE),
+    mesh_gas
 );
 
 Foam::volScalarField rho_star // Provisional density, Unit: kg/m^3
