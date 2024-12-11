@@ -730,7 +730,7 @@ int main(int argc, char *argv[])
                     );
 
                     // For solid cells, set velocity to zero;
-                    // For ghost cells, set velocity to interpolated value.
+                    // For ghost cells, set to the interpolated value.
                     {
                         Foam::vectorList val;
                         Foam::labelList idx;
@@ -761,6 +761,7 @@ int main(int argc, char *argv[])
                 setBdryVal(mesh_gas, rho, U, rhoUSn);
 
                 /* Density (thermal) */
+                thermo.correct();
                 rho = p / Rg / T;
                 rho.correctBoundaryConditions();
             }
@@ -820,7 +821,7 @@ int main(int argc, char *argv[])
                 const bool criteria_dp = eps_inf < 1e-3 * p0 && eps_1 < 1e-6 * p0 && eps_2 < 1e-4 * p0;
 
                 diagnose(mesh_gas, meshInfo_gas, rho-rho_star, cIbMask, eps_1, eps_2, eps_inf);
-                Foam::Info << "||rho_next-rho*||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
+                Foam::Info << "||rho^(m+1)-rho*||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
                 const bool criteria_drho = eps_inf < 1e-3 || eps_1 < 1e-6 || eps_2 < 1e-5;
 
                 converged = criteria_dp && criteria_drho;
@@ -833,7 +834,6 @@ int main(int argc, char *argv[])
 
         /* Check range */
         {
-            Foam::scalar eps_inf, eps_1, eps_2;
             Foam::scalar vMin, vMax;
 
             // Density
@@ -852,10 +852,6 @@ int main(int argc, char *argv[])
             // Temperature
             diagnose(mesh_gas, T, cIbMask, vMin, vMax);
             Foam::Info << "T: " << vMin << " ~ " << vMax << Foam::endl;
-
-            // Continuity
-            diagnose(mesh_gas, meshInfo_gas, Foam::fvc::div(rhoUSn), cIbMask, eps_1, eps_2, eps_inf);
-            Foam::Info << "||div(rhoU)||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
         }
 
     }
