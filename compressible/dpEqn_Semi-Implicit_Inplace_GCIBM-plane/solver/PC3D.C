@@ -68,7 +68,7 @@ const Foam::scalar T0 = 300.0;                   // Initial temperature
 
 /* Plane param */
 const Foam::scalar plane_z = 0.25e-3;            // Vertical position
-const Foam::scalar plane_T = 300.0;              // Temperature
+const Foam::scalar plane_T = 800.0;              // Temperature
 
 /* Cartesian grid */
 const Foam::scalar xMin = 0.0, xMax = 0.5e-3;    // Range in X-direction
@@ -696,7 +696,7 @@ int main(int argc, char *argv[])
                     );
 
                     // For solid cells, set temperature to constant;
-                    // For ghost cells, set temperature to interpolated value.
+                    // For ghost cells, set to interpolated value.
                     {
                         Foam::scalarList val;
                         Foam::labelList idx;
@@ -821,7 +821,7 @@ int main(int argc, char *argv[])
                 const bool criteria_dp = eps_inf < 1e-3 * p0 && eps_1 < 1e-6 * p0 && eps_2 < 1e-4 * p0;
 
                 diagnose(mesh_gas, meshInfo_gas, rho-rho_star, cIbMask, eps_1, eps_2, eps_inf);
-                Foam::Info << "||rho^(m)-rho*||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
+                Foam::Info << "||rho(m)-rho*||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
                 const bool criteria_drho = eps_inf < 1e-3 || eps_1 < 1e-6 || eps_2 < 1e-5;
 
                 converged = criteria_dp && criteria_drho;
@@ -852,7 +852,6 @@ int main(int argc, char *argv[])
             diagnose(mesh_gas, T, cIbMask, vMin, vMax);
             Foam::Info << "T: " << vMin << " ~ " << vMax << Foam::endl;
         }
-
     }
 
     return 0;
