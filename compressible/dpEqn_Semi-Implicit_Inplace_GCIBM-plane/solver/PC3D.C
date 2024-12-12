@@ -797,19 +797,17 @@ int main(int argc, char *argv[])
                 }
 
                 /* Update */
-                {
-                    p += dp;
-                    p.correctBoundaryConditions();
+                p += dp;
+                p.correctBoundaryConditions();
 
-                    U = (rho_star*U - dt * Foam::fvc::grad(dp)) / rho;
-                    U.correctBoundaryConditions();
+                U = (rho_star*U - dt * Foam::fvc::grad(dp)) / rho;
+                U.correctBoundaryConditions();
 
-                    rhoUSn -= dt * Foam::fvc::snGrad(dp) * mesh_gas.magSf();
-                    setBdryVal(mesh_gas, rho, U, rhoUSn);
+                rhoUSn -= dt * Foam::fvc::snGrad(dp) * mesh_gas.magSf();
+                setBdryVal(mesh_gas, rho, U, rhoUSn);
 
-                    USn = rhoUSn / Foam::fvc::interpolate(rho);
-                    setBdryVal(mesh_gas, U, USn);
-                }
+                USn = rhoUSn / Foam::fvc::interpolate(rho);
+                setBdryVal(mesh_gas, U, USn);
             }
 
             /* Check convergence */
@@ -830,7 +828,7 @@ int main(int argc, char *argv[])
             }
         }
         if (!converged)
-            Foam::Info << Foam::nl  << "Gas-phase failed to converged after " << m-1 << " semi-implicit iterations!" << Foam::endl;
+            Foam::Info << "\nGas-phase failed to converged after " << m-1 << " semi-implicit iterations!" << Foam::endl;
 
         /* Check range */
         {
