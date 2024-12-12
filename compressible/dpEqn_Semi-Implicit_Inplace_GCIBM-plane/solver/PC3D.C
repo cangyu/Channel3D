@@ -830,6 +830,15 @@ int main(int argc, char *argv[])
         if (!converged)
             Foam::Info << "\nGas-phase failed to converged after " << m-1 << " semi-implicit iterations!" << Foam::endl;
 
+        /* Update gas-phase properties */
+        for (int i = 0; i < mesh_gas.nCells(); i++)
+        {
+            calc_gas_property(T[i], lambda[i], mu[i], Cp[i]);
+        }
+        mu.correctBoundaryConditions();
+        Cp.correctBoundaryConditions();
+        lambda.correctBoundaryConditions();
+
         /* Check range */
         {
             Foam::scalar vMin, vMax;
