@@ -25,7 +25,7 @@ Foam::fvMesh mesh_solid
     Foam::IOobject("solid", runTime.timeName(), runTime, Foam::IOobject::MUST_READ)
 );
 
-const auto &bMesh_solid = mesh_gas.boundaryMesh();
+const auto &bMesh_solid = mesh_solid.boundaryMesh();
 
 Foam::globalMeshData meshInfo_solid(mesh_solid);
 

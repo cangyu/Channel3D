@@ -899,16 +899,44 @@ int main(int argc, char *argv[])
             Foam::Info << "T: " << vMin << " ~ " << vMax << Foam::endl;
         }
 
-        /* Update the position of gas-solid interface to (n+1) */
-		const Foam::scalar rb = 2 * mm2m;; // Unit: m/s
+        /* Update the position of gas-solid interface */
 		{
+            // Extension velocity, Unit: m/s
 			for (int i = 0; i < pointMesh_solid.size(); i++)
-				phi_solid[i] += rb * dt.value();
-			phi_solid.correctBoundaryConditions();
+				F[i] = 2 * mm2m;
 
-			for (int i = 0; i < pointMesh_gas.size(); i++)
-				phi_gas[i] += rb * dt.value();
-			phi_gas.correctBoundaryConditions();
+            // Gradient of the Level-Set fucntion (pointScalarField -> volVectorField)
+            for (int i = 0; i < mesh_solid.nCells(); i++)
+            {
+                Foam::vector g(0.0, 0.0, 0.0);
+
+                const auto &curFaceList = mesh_solid.cells()[i];
+
+                for(int j = 0; j < curFaceList.size(); j++)
+                {
+                    const auto curFaceIdx = curFaceList[j];
+                    const auto &curFace = mesh_solid.faces()[curFaceIdx];
+
+                    Foam::scalar val = 0.0;
+                    for(int k = 0; k < curFace.size(); k++)
+                    {
+                        const auto curPointIdx = curFace[k];
+                        val += phi_solid[curPointIdx];
+                    }
+                    val /= curFace.size();
+
+                    const Foam::vector &Sf = mesh_solid.Sf()[curFaceIdx];
+                    const Foam::vector d_Cf = mesh_solid.Cf()[curFaceIdx] - mesh_solid.C()[i];
+			        const Foam::vector Sn = (d_Cf & Sf) < 0.0 ? -Sf : Sf;
+
+                    g += val * Sn;
+                }
+                
+                grad_phi_solid[i] = g / mesh_solid.V()[i];
+            }
+
+            // Upwind evaluation of the Hamiltonian
+
 		}
     }
 

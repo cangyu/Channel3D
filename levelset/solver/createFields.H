@@ -182,3 +182,11 @@ Foam::volScalarField alpha_solid // VOF function
     Foam::dimensionedScalar(Foam::dimless, 0.0),
     "zeroGradient"
 );
+
+/* Gradient */
+Foam::volVectorField grad_phi_solid
+(
+    Foam::IOobject("grad_phi", runTime.timeName(), mesh_solid, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
+    mesh_solid,
+    Foam::dimensionedVector(Foam::dimless, Foam::vector(0.0, 0.0, 0.0))
+);
