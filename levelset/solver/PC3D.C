@@ -935,7 +935,24 @@ int main(int argc, char *argv[])
                 grad_phi_solid[i] = g / mesh_solid.V()[i];
             }
 
+            // Collect data on surrounding cells for each point
+            Foam::labelList p2C_num(pointMesh_solid.size());
+            Foam::vectorList p2C_gradPhi_upwind(pointMesh_solid.size());
+            Foam::vectorListList p2C_Sn(pointMesh_solid.size());
+            Foam::vectorListList p2C_Cf(pointMesh_solid.size());
+            Foam::vectorListList p2C_C(pointMesh_solid.size());
+            Foam::vectorListList p2C_gradPhi(pointMesh_solid.size());
+            Foam::scalarListList p2C_weight(pointMesh_solid.size());
+
             // Upwind evaluation of the Hamiltonian
+            for (int pI = 0; pI < pointMesh_solid.size(); pI++)
+            {
+                const Foam::label nSC = p2C_num[pI];
+
+                
+                
+                phi_solid[pI] -= dt.value() * F[pI] * Foam::mag(p2C_gradPhi_upwind[pI]);
+            }
 
 		}
     }
