@@ -159,8 +159,10 @@ void setBdryVal(const Foam::fvMesh &mesh, const Foam::volVectorField &src, Foam:
     }
 }
 
-void diagnose(const Foam::fvMesh &mesh, const Foam::globalMeshData &meshInfo, const Foam::volScalarField &src, const Foam::volScalarField &flag, double &norm1, double &norm2, double &normInf, double &minVal, double &maxVal)
+void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const Foam::volScalarField &flag, double &norm1, double &norm2, double &normInf, double &minVal, double &maxVal)
 {
+    const Foam::globalMeshData &meshInfo = mesh.globalData();
+
     norm1 = norm2 = normInf = 0.0;
     minVal = std::numeric_limits<double>::max();
     maxVal = std::numeric_limits<double>::min();
@@ -185,8 +187,10 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::globalMeshData &meshInfo, co
     Foam::reduce(maxVal, Foam::maxOp<Foam::scalar>());
 }
 
-void diagnose(const Foam::fvMesh &mesh, const Foam::globalMeshData &meshInfo, const Foam::volScalarField &src, const Foam::volScalarField &flag, double &norm1, double &norm2, double &normInf)
+void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const Foam::volScalarField &flag, double &norm1, double &norm2, double &normInf)
 {
+    const Foam::globalMeshData &meshInfo = mesh.globalData();
+
     norm1 = norm2 = normInf = 0.0;
     for (int i = 0; i < mesh.nCells(); i++)
     {
@@ -219,6 +223,34 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
     }
     Foam::reduce(minVal, Foam::minOp<Foam::scalar>());
     Foam::reduce(maxVal, Foam::maxOp<Foam::scalar>());
+}
+
+int get_vertex_surrounding_data(const Foam::pointMesh &mesh, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
+{
+    const auto &globalData = mesh.globalData();
+    const auto &coupledPatch = globalData.coupledPatch();
+    const auto &transforms = globalData.globalTransforms();
+
+    const auto &boundaryCells = globalData.boundaryCells();
+    const auto &globalPointBoundaryCellsMap = globalData.globalPointBoundaryCellsMap();
+    const auto &slaves = globalData.globalPointBoundaryCells();
+
+    Foam::vectorList bData(globalPointBoundaryCellsMap.constructSize());
+    for (int i = 0; i < boundaryCells.size(); i++)
+    {
+        const auto cI = boundaryCells[i];
+        bData[i] = src[cI];
+    }
+
+    // Exchange data
+    globalPointBoundaryCellsMap.distribute
+    (
+        transforms,
+        bData,
+        Foam::mapDistribute::transformPosition()
+    );
+
+    return 0;
 }
 
 inline double distToSurf(const Foam::vector &c)
@@ -641,6 +673,8 @@ int main(int argc, char *argv[])
     addressing.collectData(mesh_gas.C(), sten_pos);
     addressing.collectData(cIbMarker, sten_ib);
 
+    return -1;
+
     while(runTime.loop())
     {
         const Foam::dimensionedScalar dt(Foam::dimTime, runTime.deltaTValue());
@@ -853,11 +887,11 @@ int main(int argc, char *argv[])
             {
                 Foam::scalar eps_inf, eps_1, eps_2;
 
-                diagnose(mesh_gas, meshInfo_gas, dp, cIbMask, eps_1, eps_2, eps_inf);
+                diagnose(mesh_gas, dp, cIbMask, eps_1, eps_2, eps_inf);
                 Foam::Info << "||dp||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
                 const bool criteria_dp = eps_inf < 1e-3 * p0 && eps_1 < 1e-6 * p0 && eps_2 < 1e-4 * p0;
 
-                diagnose(mesh_gas, meshInfo_gas, rho-rho_star, cIbMask, eps_1, eps_2, eps_inf);
+                diagnose(mesh_gas, rho-rho_star, cIbMask, eps_1, eps_2, eps_inf);
                 Foam::Info << "||rho(m)-rho*||: " << eps_inf << "(Inf), " << eps_1 << "(1), " << eps_2 << "(2)" << Foam::endl;
                 const bool criteria_drho = eps_inf < 1e-3 || eps_1 < 1e-6 || eps_2 < 1e-5;
 
@@ -938,11 +972,11 @@ int main(int argc, char *argv[])
             // Collect data on surrounding cells for each point
             Foam::labelList p2C_num(pointMesh_solid.size());
             Foam::vectorList p2C_gradPhi_upwind(pointMesh_solid.size());
-            Foam::vectorListList p2C_Sn(pointMesh_solid.size());
-            Foam::vectorListList p2C_Cf(pointMesh_solid.size());
-            Foam::vectorListList p2C_C(pointMesh_solid.size());
-            Foam::vectorListList p2C_gradPhi(pointMesh_solid.size());
-            Foam::scalarListList p2C_weight(pointMesh_solid.size());
+            Foam::List<Foam::vectorList> p2C_Sn(pointMesh_solid.size());
+            Foam::List<Foam::vectorList> p2C_Cf(pointMesh_solid.size());
+            Foam::List<Foam::vectorList> p2C_C(pointMesh_solid.size());
+            Foam::List<Foam::vectorList> p2C_gradPhi(pointMesh_solid.size());
+            Foam::List<Foam::scalarList> p2C_weight(pointMesh_solid.size());
 
             // Upwind evaluation of the Hamiltonian
             for (int pI = 0; pI < pointMesh_solid.size(); pI++)

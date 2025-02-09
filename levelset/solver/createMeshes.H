@@ -5,10 +5,6 @@ Foam::fvMesh mesh_gas
     Foam::IOobject("gas", runTime.timeName(), runTime, Foam::IOobject::MUST_READ)
 );
 
-const auto &bMesh_gas = mesh_gas.boundaryMesh();
-
-Foam::globalMeshData meshInfo_gas(mesh_gas);
-
 Foam::pointMesh pointMesh_gas(mesh_gas);
 
 // Force calculation of extended edge addressing
@@ -24,10 +20,6 @@ Foam::fvMesh mesh_solid
 (
     Foam::IOobject("solid", runTime.timeName(), runTime, Foam::IOobject::MUST_READ)
 );
-
-const auto &bMesh_solid = mesh_solid.boundaryMesh();
-
-Foam::globalMeshData meshInfo_solid(mesh_solid);
 
 Foam::pointMesh pointMesh_solid(mesh_solid);
 
