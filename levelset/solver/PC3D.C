@@ -225,15 +225,62 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
     Foam::reduce(maxVal, Foam::maxOp<Foam::scalar>());
 }
 
-int get_vertex_surrounding_data(const Foam::pointMesh &mesh, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
+int get_vertex_surrounding_data(const Foam::polyMesh &polyMesh, const Foam::pointMesh &pointMesh, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
 {
-    const auto &globalData = mesh.globalData();
-    const auto &coupledPatch = globalData.coupledPatch();
-    const auto &transforms = globalData.globalTransforms();
+    const Foam::pointBoundaryMesh &bMesh = pointMesh.boundary();
 
-    const auto &boundaryCells = globalData.boundaryCells();
-    const auto &globalPointBoundaryCellsMap = globalData.globalPointBoundaryCellsMap();
-    const auto &slaves = globalData.globalPointBoundaryCells();
+    Foam::Pout << bMesh.size() << " boundary patches:";
+    for (int i = 0; i < bMesh.size(); i++)
+        Foam::Pout << " " << bMesh[i].name() << " (" << bMesh[i].size() << ", " << bMesh[i].index() << ", " << bMesh[i].coupled() << ", " << bMesh[i].meshPoints().size() << ")";
+    Foam::Pout << Foam::endl;
+    
+    Foam::boolList pntCoupledFlag(pointMesh.size(), false);
+    Foam::boolList pntVistedFlag(pointMesh.size(), false);
+    int nParPnt = 0;
+    for (int i = 0; i < bMesh.size(); i++)
+    {
+        if (!bMesh[i].coupled())
+            continue;
+
+        const Foam::labelList &pL = bMesh[i].meshPoints();
+        for (int j = 0; j < pL.size(); j++)
+        {
+            const auto pI = pL[j];
+            if (!pntVistedFlag[pI])
+            {
+                pntCoupledFlag[pI] = true;
+                pntVistedFlag[pI] = true;
+                ++nParPnt;
+            }
+        }
+    }
+
+    dst.resize(pointMesh.size());
+    for (int i = 0; i < pointMesh.size(); i++)
+    {
+        if (pntCoupledFlag[i])
+            continue;
+
+        const Foam::labelList &cL = polyMesh.pointCells()[i];
+        dst[i].resize(cL.size());
+        for (int j = 0; j < cL.size(); j++)
+            dst[i][j] = src[cL[j]];
+    }
+
+    const Foam::globalMeshData &globalData = pointMesh.globalData();
+
+    const Foam::indirectPrimitivePatch &coupledPatch = globalData.coupledPatch();
+    const Foam::globalIndexAndTransform &transforms = globalData.globalTransforms();
+
+    const Foam::labelList &boundaryCells = globalData.boundaryCells();
+    const Foam::mapDistribute &globalPointBoundaryCellsMap = globalData.globalPointBoundaryCellsMap();
+    const Foam::labelListList &slaves = globalData.globalPointBoundaryCells();
+
+    Foam::Pout  << pointMesh.size() << " points, "
+                << nParPnt << "/" << slaves.size() << "/" << coupledPatch.nPoints() << "/" << coupledPatch.meshPoints().size() << "/"
+                << boundaryCells.size() << "/"
+                << globalPointBoundaryCellsMap.constructSize()
+                << Foam::endl;
 
     Foam::vectorList bData(globalPointBoundaryCellsMap.constructSize());
     for (int i = 0; i < boundaryCells.size(); i++)
@@ -249,6 +296,24 @@ int get_vertex_surrounding_data(const Foam::pointMesh &mesh, const Foam::volVect
         bData,
         Foam::mapDistribute::transformPosition()
     );
+
+    // Record data on parallel boundary points
+    for (int i = 0; i < slaves.size(); i++)
+    {
+        const Foam::labelList &pointCells = slaves[i];
+        const Foam::label pI = coupledPatch.meshPoints()[i];
+
+        if (pntCoupledFlag[pI] && pntVistedFlag[pI] && dst[pI].empty())
+        {
+            dst[pI].resize(pointCells.size());
+            for (int j = 0; j < pointCells.size(); j++)
+                dst[pI][j] = bData[pointCells[j]];
+        }
+        else
+        {
+            Foam::Pout << i << ", " << pI << " is problembatic!" << Foam::endl;
+        }
+    }
 
     return 0;
 }
@@ -665,13 +730,18 @@ int main(int argc, char *argv[])
 
     /* Extended stencil */
     const Foam::extendedCentredCellToCellStencil& addressing = Foam::centredCPCCellToCellStencilObject::New(mesh_gas); // Processor-boundaries are dealt with automatically
-    Foam::Pout << addressing.stencil().size() << "/" << mesh_gas.nCells() << Foam::endl;
+    // Foam::Pout << addressing.stencil().size() << "/" << mesh_gas.nCells() << Foam::endl;
 
     // Initialize stencil storage
     Foam::List<Foam::vectorList> sten_pos(mesh_gas.nCells());
     Foam::List<Foam::scalarList> sten_ib(mesh_gas.nCells());
     addressing.collectData(mesh_gas.C(), sten_pos);
     addressing.collectData(cIbMarker, sten_ib);
+
+    Foam::List<Foam::vectorList> pntAdjCentroid;
+
+    get_vertex_surrounding_data(mesh_solid, pointMesh_solid, mesh_solid.C(), pntAdjCentroid);
+
 
     return -1;
 
