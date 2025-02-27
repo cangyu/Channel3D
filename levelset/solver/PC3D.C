@@ -225,15 +225,17 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
     Foam::reduce(maxVal, Foam::maxOp<Foam::scalar>());
 }
 
-int get_vertex_surrounding_data(const Foam::polyMesh &polyMesh, const Foam::pointMesh &pointMesh, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
+int collect_pointCell_data(const Foam::polyMesh &polyMesh, const Foam::pointMesh &pointMesh, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
 {
     const Foam::pointBoundaryMesh &bMesh = pointMesh.boundary();
-
-    Foam::Pout << bMesh.size() << " boundary patches:";
-    for (int i = 0; i < bMesh.size(); i++)
-        Foam::Pout << " " << bMesh[i].name() << " (" << bMesh[i].size() << ", " << bMesh[i].index() << ", " << bMesh[i].coupled() << ", " << bMesh[i].meshPoints().size() << ")";
-    Foam::Pout << Foam::endl;
+    const Foam::globalMeshData &globalData = pointMesh.globalData();
+    const Foam::indirectPrimitivePatch &coupledPatch = globalData.coupledPatch();
+    const Foam::globalIndexAndTransform &transforms = globalData.globalTransforms();
+    const Foam::labelList &boundaryCells = globalData.boundaryCells();
+    const Foam::mapDistribute &globalPointBoundaryCellsMap = globalData.globalPointBoundaryCellsMap();
+    const Foam::labelListList &slaves = globalData.globalPointBoundaryCells();
     
+    /* Count and mark points on parallel boundary */
     Foam::boolList pntCoupledFlag(pointMesh.size(), false);
     Foam::boolList pntVistedFlag(pointMesh.size(), false);
     int nParPnt = 0;
@@ -246,15 +248,22 @@ int get_vertex_surrounding_data(const Foam::polyMesh &polyMesh, const Foam::poin
         for (int j = 0; j < pL.size(); j++)
         {
             const auto pI = pL[j];
-            if (!pntVistedFlag[pI])
-            {
-                pntCoupledFlag[pI] = true;
-                pntVistedFlag[pI] = true;
-                ++nParPnt;
-            }
+            if (pntVistedFlag[pI])
+                continue;
+
+            pntCoupledFlag[pI] = true;
+            pntVistedFlag[pI] = true;
+            ++nParPnt;
         }
     }
 
+    if (nParPnt != slaves.size())
+    {
+        Foam::Perr << "Inconsistent number of points on parallel boundaries: " << nParPnt << "(My) / " << slaves.size() << "(globalData)" << Foam::endl;
+        return 1;
+    }
+
+    /* Collect data for points inside the domain and on physical boundaries */
     dst.resize(pointMesh.size());
     for (int i = 0; i < pointMesh.size(); i++)
     {
@@ -267,28 +276,14 @@ int get_vertex_surrounding_data(const Foam::polyMesh &polyMesh, const Foam::poin
             dst[i][j] = src[cL[j]];
     }
 
-    const Foam::globalMeshData &globalData = pointMesh.globalData();
-
-    const Foam::indirectPrimitivePatch &coupledPatch = globalData.coupledPatch();
-    const Foam::globalIndexAndTransform &transforms = globalData.globalTransforms();
-
-    const Foam::labelList &boundaryCells = globalData.boundaryCells();
-    const Foam::mapDistribute &globalPointBoundaryCellsMap = globalData.globalPointBoundaryCellsMap();
-    const Foam::labelListList &slaves = globalData.globalPointBoundaryCells();
-
-    Foam::Pout  << pointMesh.size() << " points, "
-                << nParPnt << "/" << slaves.size() << "/" << coupledPatch.nPoints() << "/" << coupledPatch.meshPoints().size() << "/"
-                << boundaryCells.size() << "/"
-                << globalPointBoundaryCellsMap.constructSize()
-                << Foam::endl;
-
+    /* Collect data for points on parallel boundaries */
+    // Record local data
     Foam::vectorList bData(globalPointBoundaryCellsMap.constructSize());
     for (int i = 0; i < boundaryCells.size(); i++)
     {
         const auto cI = boundaryCells[i];
         bData[i] = src[cI];
     }
-
     // Exchange data
     globalPointBoundaryCellsMap.distribute
     (
@@ -296,8 +291,7 @@ int get_vertex_surrounding_data(const Foam::polyMesh &polyMesh, const Foam::poin
         bData,
         Foam::mapDistribute::transformPosition()
     );
-
-    // Record data on parallel boundary points
+    // Store data in order
     for (int i = 0; i < slaves.size(); i++)
     {
         const Foam::labelList &pointCells = slaves[i];
@@ -311,7 +305,12 @@ int get_vertex_surrounding_data(const Foam::polyMesh &polyMesh, const Foam::poin
         }
         else
         {
-            Foam::Pout << i << ", " << pI << " is problembatic!" << Foam::endl;
+            Foam::Perr << "Problem detected on parallel-boundary point " << i << "(" << pI << "): "
+                       << "\tpntCoupledFlag=" << pntCoupledFlag[pI] << ", "
+                       << "\tpntVisitedFlag=" << pntVistedFlag[pI] << ", "
+                       << "\tempty=" << dst[pI].empty()
+                       << Foam::endl;
+            return 2;
         }
     }
 
@@ -739,11 +738,7 @@ int main(int argc, char *argv[])
     addressing.collectData(cIbMarker, sten_ib);
 
     Foam::List<Foam::vectorList> pntAdjCentroid;
-
-    get_vertex_surrounding_data(mesh_solid, pointMesh_solid, mesh_solid.C(), pntAdjCentroid);
-
-
-    return -1;
+    collect_pointCell_data(mesh_solid, pointMesh_solid, mesh_solid.C(), pntAdjCentroid);
 
     while(runTime.loop())
     {
@@ -1040,13 +1035,16 @@ int main(int argc, char *argv[])
             }
 
             // Collect data on surrounding cells for each point
+            Foam::List<Foam::vectorList> p2C_gradPhi;
+            collect_pointCell_data(mesh_solid, pointMesh_solid, grad_phi_solid, p2C_gradPhi);
+
             Foam::labelList p2C_num(pointMesh_solid.size());
             Foam::vectorList p2C_gradPhi_upwind(pointMesh_solid.size());
             Foam::List<Foam::vectorList> p2C_Sn(pointMesh_solid.size());
             Foam::List<Foam::vectorList> p2C_Cf(pointMesh_solid.size());
             Foam::List<Foam::vectorList> p2C_C(pointMesh_solid.size());
-            Foam::List<Foam::vectorList> p2C_gradPhi(pointMesh_solid.size());
             Foam::List<Foam::scalarList> p2C_weight(pointMesh_solid.size());
+
 
             // Upwind evaluation of the Hamiltonian
             for (int pI = 0; pI < pointMesh_solid.size(); pI++)
