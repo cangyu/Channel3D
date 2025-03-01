@@ -190,3 +190,10 @@ Foam::volVectorField grad_phi_solid
     mesh_solid,
     Foam::dimensionedVector(Foam::dimless, Foam::vector(0.0, 0.0, 0.0))
 );
+
+Foam::pointVectorField grad_phi_upwind_solid
+(
+    Foam::IOobject("grad_phi_upwind", runTime.timeName(), mesh_solid, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
+    pointMesh_solid,
+    Foam::dimensionedVector(Foam::dimLength, Foam::vector(0.0, 0.0, 0.0))
+);

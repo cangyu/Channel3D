@@ -225,7 +225,7 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
     Foam::reduce(maxVal, Foam::maxOp<Foam::scalar>());
 }
 
-int collect_pointCell_data(const Foam::polyMesh &polyMesh, const Foam::pointMesh &pointMesh, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
+int collectData_pointCell(const Foam::polyMesh &polyMesh, const Foam::pointMesh &pointMesh, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
 {
     const Foam::pointBoundaryMesh &bMesh = pointMesh.boundary();
     const Foam::globalMeshData &globalData = pointMesh.globalData();
@@ -738,7 +738,7 @@ int main(int argc, char *argv[])
     addressing.collectData(cIbMarker, sten_ib);
 
     Foam::List<Foam::vectorList> pntAdjCentroid;
-    collect_pointCell_data(mesh_solid, pointMesh_solid, mesh_solid.C(), pntAdjCentroid);
+    collectData_pointCell(mesh_solid, pointMesh_solid, mesh_solid.C(), pntAdjCentroid);
 
     while(runTime.loop())
     {
@@ -907,32 +907,27 @@ int main(int argc, char *argv[])
             /* Corrector */
             {
                 /* Pressure-correction Helmholtz equation */
+                // Discretized equation
+                Foam::fvScalarMatrix dpEqn
+                (
+                    Foam::fvm::Sp(1.0/(dt * Rg * T), dp) - dt * Foam::fvm::laplacian(dp) == -(Foam::fvc::div(rhoUSn) + Foam::fvc::ddt(rho))
+                );
+                // For both solid and ghost cells, set the incremental pressure-correction to zero.
                 {
-                    // Discretized equation
-                    Foam::fvScalarMatrix dpEqn
-                    (
-                        Foam::fvm::Sp(1.0/(dt * Rg * T), dp) - dt * Foam::fvm::laplacian(dp) == -(Foam::fvc::div(rhoUSn) + Foam::fvc::ddt(rho))
-                    );
-
-                    // For both solid and ghost cells, set the incremental pressure-correction to zero.
+                    Foam::scalarList val;
+                    Foam::labelList idx;
+                    for (int i=0; i < mesh_gas.nCells(); i++)
                     {
-                        Foam::scalarList val;
-                        Foam::labelList idx;
-
-                        for (int i=0; i < mesh_gas.nCells(); i++)
+                        if (cIbMarker[i] < cFluid)
                         {
-                            if (cIbMarker[i] < cFluid)
-                            {
-                                idx.append(i);
-                                val.append(0.0);
-                            }
+                            idx.append(i);
+                            val.append(0.0);
                         }
-                        dpEqn.setValues(idx, val);
                     }
-
-                    // Solve
-                    dpEqn.solve();
+                    dpEqn.setValues(idx, val);
                 }
+                // Solve
+                dpEqn.solve();
 
                 /* Update */
                 p += dp;
@@ -966,7 +961,7 @@ int main(int argc, char *argv[])
             }
         }
         if (!converged)
-            Foam::Info << "\nGas-phase failed to converged after " << m-1 << " semi-implicit iterations!" << Foam::endl;
+            Foam::Perr << "\nGas-phase failed to converged after " << m-1 << " semi-implicit iterations!" << Foam::endl;
 
         /* Update gas-phase properties */
         for (int i = 0; i < mesh_gas.nCells(); i++)
@@ -1036,26 +1031,60 @@ int main(int argc, char *argv[])
 
             // Collect data on surrounding cells for each point
             Foam::List<Foam::vectorList> p2C_gradPhi;
-            collect_pointCell_data(mesh_solid, pointMesh_solid, grad_phi_solid, p2C_gradPhi);
+            collectData_pointCell(mesh_solid, pointMesh_solid, grad_phi_solid, p2C_gradPhi);
 
-            Foam::labelList p2C_num(pointMesh_solid.size());
-            Foam::vectorList p2C_gradPhi_upwind(pointMesh_solid.size());
-            Foam::List<Foam::vectorList> p2C_Sn(pointMesh_solid.size());
-            Foam::List<Foam::vectorList> p2C_Cf(pointMesh_solid.size());
-            Foam::List<Foam::vectorList> p2C_C(pointMesh_solid.size());
-            Foam::List<Foam::scalarList> p2C_weight(pointMesh_solid.size());
-
-
-            // Upwind evaluation of the Hamiltonian
-            for (int pI = 0; pI < pointMesh_solid.size(); pI++)
+            // Upwind reconstruction of the gradient on points (centroids -> points)
+            for (int i = 0; i < pointMesh_solid.size(); i++)
             {
-                const Foam::label nSC = p2C_num[pI];
+                const Foam::vector &P = mesh_solid.points()[i];
+                const Foam::vectorList &gradPhi = p2C_gradPhi[i];
+                const Foam::vectorList &adjC = pntAdjCentroid[i];
+                Foam::vector &gradPhi_dst = grad_phi_upwind_solid[i];
 
-                
-                
-                phi_solid[pI] -= dt.value() * F[pI] * Foam::mag(p2C_gradPhi_upwind[pI]);
+                // Check size
+                if (adjC.size() != gradPhi.size())
+                {
+                    Foam::Perr << "Inconsistant number of surrounding cells of point[" << i << "]: " << adjC.size() << "/" << gradPhi.size() << Foam::endl;
+                    return 110;
+                }
+                const int nAdjCell = adjC.size();
+
+                // Approximate normal direction
+                Foam::vector n(0.0, 0.0, 0.0);
+                Foam::scalar w_sum = 0.0;
+                for (int j = 0; j < nAdjCell; j++)
+                {
+                    const Foam::vector &C = adjC[j];
+                    const Foam::vector A = P - C;
+                    const Foam::scalar d = Foam::mag(A);
+                    const Foam::scalar w = 1.0 / d;
+                    w_sum += w;
+                    n += w * gradPhi[j];
+                }
+                n /= w_sum;
+
+                // Calculate the upwind weight
+                gradPhi_dst.x() = 0.0;
+                gradPhi_dst.y() = 0.0;
+                gradPhi_dst.z() = 0.0;
+                Foam::scalar gamma_sum = 0.0;
+                for (int j = 0; j < nAdjCell; j++)
+                {
+                    const Foam::vector &C = adjC[j];
+                    const Foam::vector A = P - C;
+                    const Foam::scalar gamma = std::max(0.0, n&A/Foam::mag(A));
+                    gamma_sum += gamma;
+                    gradPhi_dst += gamma * gradPhi[j];
+                }
+                gradPhi_dst /= gamma_sum;
             }
 
+            // Upwind evaluation of the Hamiltonian
+            for (int i = 0; i < pointMesh_solid.size(); i++)
+            {
+                const Foam::scalar H = F[i] * Foam::mag(grad_phi_upwind_solid[i]);
+                phi_solid[i] -= dt.value() * H;
+            }
 		}
     }
 
