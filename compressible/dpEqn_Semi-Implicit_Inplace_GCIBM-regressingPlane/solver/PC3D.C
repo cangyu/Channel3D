@@ -56,28 +56,6 @@ const Foam::dimensionedScalar MW(Foam::dimMass/Foam::dimMoles, 26e-3);
 // Gas constant, Unit: J/kg/K
 const Foam::dimensionedScalar Rg(R/MW);
 
-/* Classification of gas-phase cells */
-const Foam::scalar cFluid = 1.0;                 // Fluid cell
-const Foam::scalar cGhost = 0.0;                 // Ghost cell
-const Foam::scalar cSolid = -1.0;                // Solid cell
-
-/* Flow condition */
-const Foam::scalar Pr = 0.71;                    // Prandtl number
-const Foam::scalar p0 = 2.07 * one_mpa;          // Ambient pressure
-const Foam::scalar T0 = 300.0;                   // Initial temperature
-
-/* Plane param */
-const Foam::scalar plane_z = 0.25e-3;            // Vertical position
-const Foam::scalar plane_T = 800.0;              // Temperature
-
-/* Cartesian grid */
-const Foam::scalar xMin = 0.0, xMax = 0.5e-3;    // Range in X-direction
-const Foam::scalar yMin = 0.0, yMax = 0.5e-3;    // Range in Y-direction
-const Foam::scalar zMin = 0.0, zMax = 1.0e-3;    // Range in Z-direction
-const Foam::scalar L = xMax - xMin;
-const Foam::scalar h = L / 32;              // Spacing
-const Foam::scalar h_inv = 1.0 / h;
-
 /* Properties of the solid material */
 const double rho_AP = 1950.0;                    // Density of AP, Unit: kg/m^3
 const double rho_HTPB = 920.0;                   // Density of HTPB, Unit: kg/m^3
@@ -88,16 +66,73 @@ const double lambda_HTPB = 0.276;                // Conductivity of HTPB, Unit: 
 const double qL_AP = -80 * kcal2J;               // Latent heat of AP, Unit: J/kg
 const double qL_HTPB = -66 * kcal2J;             // Latent heat of HTPB, Unit: J/kg
 
+/* Cartesian grid */
+const Foam::scalar L = 0.5*mm2m;                 // Domain characteristic length, Unit: m
+const Foam::label N = 32;                        // Grid resolution
+const Foam::scalar h = L / 32;                   // Spacing
+const Foam::scalar h_inv = 1.0 / h;
+const Foam::scalar xMin = 0.0, xMax = xMin+L;    // Range in X-direction
+const Foam::scalar yMin = 0.0, yMax = yMin+L;    // Range in Y-direction
+const Foam::scalar zMin = 0.0, zMax = zMin+2*L;  // Range in Z-direction
+
+/* Classification of IBM cells */
+const Foam::scalar cFluid = 1.0;                 // Fluid cell
+const Foam::scalar cGhost = 0.0;                 // Ghost cell
+const Foam::scalar cSolid = -1.0;                // Solid cell
+
+/* Flow condition */
+const Foam::scalar Pr = 0.71;                    // Prandtl number
+const Foam::scalar p0 = 2.07 * one_mpa;          // Ambient pressure
+const Foam::scalar T0 = 300.0;                   // Initial temperature
+
+/* Plane param */
+const Foam::scalar plane_z = 0.25*mm2m;          // Vertical position at initial
+const Foam::scalar plane_T = 800.0;              // Temperature
+
+/**
+ * Check if two scalars are equal in the float-point-number sense.
+ * The relative error is set to 1e-5.
+ * If "x" or "y" is 0, better to use the specialized version.
+ */
 inline bool isEqual(double x, double y)
 {
     return std::islessequal(std::abs(x-y), 1e-5 * std::abs(x));
 }
 
+/**
+ * Check if the given scalar is zero in the float-point-number sense.
+ * The absolute error is set to 1e-7.
+ */
 inline bool isZero(double x)
 {
     return std::isless(std::abs(x), 1e-7);
 }
 
+/**
+ * Check the type of grid cells, based on the prescribed marker value.
+ * These are felper functions to avoid explicit float-point comparsion.
+ */
+inline bool isFluidCell(double marker)
+{
+    return isEqual(marker, cFluid);
+}
+
+inline bool isSolidCell(double marker)
+{
+    return isEqual(marker, cSolid);
+}
+
+inline bool isGhostCell(double marker)
+{
+    return isZero(marker);
+}
+
+/**
+ * Identify the position on equidistant grid.
+ * @param x_ The target coordinate.
+ * @param x0_ The starting coordinate.
+ * @param h_ The spacing of the equidistant grid.
+ */
 inline bool atFullSpacing(double x_, double x0_, double h_)
 {
     const double idx = (x_ - x0_) / h_;
@@ -112,26 +147,39 @@ inline bool atHalfSpacing(double x_, double x0_, double h_)
     return isEqual(res, 0.5);
 }
 
+/**
+ * Check if the three-dimensional point is located on any cell centroid of the Cartesian grid.
+ * Parameters of the Cartesian grid are prescribed at the beginning.
+ */
 inline bool isCellCentroid(const Foam::vector &p)
 {
     return atHalfSpacing(p.x(), xMin, h) && atHalfSpacing(p.y(), yMin, h) && atHalfSpacing(p.z(), zMin, h);
 }
 
+/**
+ * Check if the three-dimensional point is located on any node of the Cartesian grid.
+ * Parameters of the Cartesian grid are prescribed at the beginning.
+ */
 inline bool isNode(const Foam::vector &p)
 {
     return atFullSpacing(p.x(), xMin, h) && atFullSpacing(p.y(), yMin, h) && atFullSpacing(p.z(), zMin, h);
 }
 
+/**
+ * On the Cartesian grid, convert the three-dimensional coordinate to the index of each dimension.
+ * Parameters of the Cartesian grid are prescribed at the beginning.
+ */
 inline void xyz2ijk(const Foam::vector &p_, int &i_, int &j_, int &k_)
 {
-    const double dx = p_.x() - xMin;
-    const double dy = p_.y() - yMin;
-    const double dz = p_.z() - zMin;
-    i_ = static_cast<int>(std::fma(dx, h_inv, 0.5));
-    j_ = static_cast<int>(std::fma(dy, h_inv, 0.5));
-    k_ = static_cast<int>(std::fma(dz, h_inv, 0.5));
+    i_ = static_cast<int>(std::fma(p_.x() - xMin, h_inv, 0.5));
+    j_ = static_cast<int>(std::fma(p_.y() - yMin, h_inv, 0.5));
+    k_ = static_cast<int>(std::fma(p_.z() - zMin, h_inv, 0.5));
 }
 
+/**
+ * dst = src1 * src2
+ * The boundary value of "src1" and "src2" are prescribed by boundary conditions.
+ */
 void setBdryVal(const Foam::fvMesh &mesh, const Foam::volScalarField &src1, const Foam::volVectorField &src2, Foam::surfaceScalarField &dst)
 {
     for (int pI = 0; pI < mesh.boundary().size(); pI++)
@@ -146,6 +194,10 @@ void setBdryVal(const Foam::fvMesh &mesh, const Foam::volScalarField &src1, cons
     }
 }
 
+/**
+ * dst = src
+ * The boundary value of "src" is prescribed by boundary condition.
+ */
 void setBdryVal(const Foam::fvMesh &mesh, const Foam::volVectorField &src, Foam::surfaceScalarField &dst)
 {
     for (int pI = 0; pI < mesh.boundary().size(); pI++)
@@ -159,17 +211,30 @@ void setBdryVal(const Foam::fvMesh &mesh, const Foam::volVectorField &src, Foam:
     }
 }
 
+/**
+ * Check the range of the target field with mask.
+ * @param src Target scalar field.
+ * @param flag Mask of the "src".
+ * @param norm1 The L1 norm of "src".
+ * @param norm2 The L2 norm of "src".
+ * @param normInf The infinity norm of "src".
+ * @param minVal Minimum of "src".
+ * @param maxVal Maximum of "src".
+ */
 void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const Foam::volScalarField &flag, double &norm1, double &norm2, double &normInf, double &minVal, double &maxVal)
 {
     const Foam::globalMeshData &meshInfo = mesh.globalData();
-
+    int nMaskedCell = 0;
     norm1 = norm2 = normInf = 0.0;
     minVal = std::numeric_limits<double>::max();
     maxVal = std::numeric_limits<double>::min();
     for (int i = 0; i < mesh.nCells(); i++)
     {
         if (isZero(flag[i]))
+        {
+            ++nMaskedCell;
             continue;
+        }
 
         const double cVal = std::abs(src[i]);
         normInf = std::max(normInf, cVal);
@@ -178,24 +243,29 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
         minVal = std::min(minVal, src[i]);
         maxVal = std::max(maxVal, src[i]);
     }
+    Foam::reduce(minVal, Foam::minOp<Foam::scalar>());
+    Foam::reduce(maxVal, Foam::maxOp<Foam::scalar>());
     Foam::reduce(normInf, Foam::maxOp<Foam::scalar>());
     Foam::reduce(norm1, Foam::sumOp<Foam::scalar>());
     Foam::reduce(norm2, Foam::sumOp<Foam::scalar>());
-    norm1 /= meshInfo.nTotalCells();
-    norm2 = std::sqrt(norm2/meshInfo.nTotalCells());
-    Foam::reduce(minVal, Foam::minOp<Foam::scalar>());
-    Foam::reduce(maxVal, Foam::maxOp<Foam::scalar>());
+    Foam::reduce(nMaskedCell, Foam::sumOp<int>());
+    const int nActiveCell = meshInfo.nTotalCells() - nMaskedCell;
+    norm1 /= nActiveCell;
+    norm2 = std::sqrt(norm2/nActiveCell);
 }
 
 void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const Foam::volScalarField &flag, double &norm1, double &norm2, double &normInf)
 {
     const Foam::globalMeshData &meshInfo = mesh.globalData();
-
+    int nMaskedCell = 0;
     norm1 = norm2 = normInf = 0.0;
     for (int i = 0; i < mesh.nCells(); i++)
     {
         if (isZero(flag[i]))
+        {
+            ++nMaskedCell;
             continue;
+        }
 
         const double cVal = std::abs(src[i]);
         normInf = std::max(normInf, cVal);
@@ -205,8 +275,10 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
     Foam::reduce(normInf, Foam::maxOp<Foam::scalar>());
     Foam::reduce(norm1, Foam::sumOp<Foam::scalar>());
     Foam::reduce(norm2, Foam::sumOp<Foam::scalar>());
-    norm1 /= meshInfo.nTotalCells();
-    norm2 = std::sqrt(norm2/meshInfo.nTotalCells());
+    Foam::reduce(nMaskedCell, Foam::sumOp<int>());
+    const int nActiveCell = meshInfo.nTotalCells() - nMaskedCell;
+    norm1 /= nActiveCell;
+    norm2 = std::sqrt(norm2/nActiveCell);
 }
 
 void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const Foam::volScalarField &flag, double &minVal, double &maxVal)
@@ -225,6 +297,10 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
     Foam::reduce(maxVal, Foam::maxOp<Foam::scalar>());
 }
 
+/**
+ * Collect the data on cells surrounding each point.
+ * Points on parallel boundaries are handled.
+ */
 int collectData_pointCell(const Foam::polyMesh &polyMesh, const Foam::pointMesh &pointMesh, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
 {
     const Foam::pointBoundaryMesh &bMesh = pointMesh.boundary();
@@ -236,6 +312,7 @@ int collectData_pointCell(const Foam::polyMesh &polyMesh, const Foam::pointMesh 
     const Foam::labelListList &slaves = globalData.globalPointBoundaryCells();
     
     /* Count and mark points on parallel boundary */
+    // TODO: only to be done once, move to the init stage of the main program
     Foam::boolList pntCoupledFlag(pointMesh.size(), false);
     Foam::boolList pntVistedFlag(pointMesh.size(), false);
     int nParPnt = 0;
@@ -317,27 +394,36 @@ int collectData_pointCell(const Foam::polyMesh &polyMesh, const Foam::pointMesh 
     return 0;
 }
 
-inline double distToSurf(const Foam::vector &c)
+/**
+ * Check if the give LEVEL-SET value indicates the FLUID phase.
+ */
+inline bool inFluid(Foam::scalar c)
 {
-    return c.z() - plane_z;
+    return c > 0.0;
 }
 
-inline bool pntInFluid(const Foam::vector &c)
+/**
+ * Check if the give LEVEL-SET value indicates the SOLID phase.
+ */
+inline bool inSolid(Foam::scalar c)
 {
-    return distToSurf(c) > 0.0;
+    return c < 0.0;
 }
 
-inline bool pntInSolid(const Foam::vector &c)
+/**
+ * Check if the give LEVEL-SET value is near the INTERFACE.
+ * The criteria is set to 1/10 of the grid-spacing.
+ */
+inline bool nearSurf(Foam::scalar c)
 {
-    return !pntInFluid(c);
+    return std::abs(c) < 0.1 * h;
 }
 
-inline bool pntNearSurf(const Foam::vector &c)
-{
-    return std::abs(distToSurf(c)) < 0.1 * h;
-}
-
-bool cellIsIntersected(const Foam::vectorList &v)
+/**
+ * Check if the mesh cell is intersected by the iso-surface.
+ * Based on its nodal level-set values.
+ */
+bool cellIsIntersected(const Foam::scalarList &v)
 {
     bool flag = pntInSolid(v[0]);
     for (int i = 1; i < v.size(); i++)
@@ -348,7 +434,7 @@ bool cellIsIntersected(const Foam::vectorList &v)
     return false;
 }
 
-Foam::scalar cellNum(const Foam::vectorList &v, const Foam::vector &c)
+Foam::scalar cellNum(const Foam::scalar c, const Foam::scalarList &v)
 {
     if (pntInFluid(c))
         return cFluid;
@@ -476,6 +562,9 @@ void identifyIBCell(const Foam::fvMesh &mesh, Foam::volScalarField &marker)
     Foam::Pout << nFluid << "(fluid) + " << nGhost << "(ghost) + " << nSolid << "(solid) = " << nFluid+nGhost+nSolid << "/" << mesh.nCells() << Foam::endl;
 }
 
+/**
+ * Immersed-Bounary Method interpolation routines.
+ */
 void ibInterp_Dirichlet_Linear(const Foam::vector &p_src, Foam::scalar val_src, const std::vector<Foam::vector> &p_adj, const std::vector<Foam::scalar> &val_adj, const Foam::vector &p_dst, Foam::scalar &val_dst)
 {
     const int nADJ = p_adj.size();
@@ -646,6 +735,9 @@ void ibInterp_Robin_Linear(const Foam::vector &p_src, const Foam::vector &n_src,
     val_dst = val_img - snGrad * d;
 }
 
+/**
+ * Immersed-Bounary Method interpolation routines.
+ */
 void calc_gas_property(double T, double &lambda_, double &mu_, double &Cp_)
 {
     lambda_ = 1.08e-4 * T + 0.0133;              // Unit: W/m/K
