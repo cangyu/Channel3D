@@ -395,7 +395,7 @@ int collectData_pointCell(const Foam::polyMesh &polyMesh, const Foam::pointMesh 
 }
 
 /**
- * Check if the give LEVEL-SET value indicates the FLUID phase.
+ * Check if the given LEVEL-SET value indicates the FLUID phase.
  */
 inline bool inFluid(Foam::scalar c)
 {
@@ -403,7 +403,7 @@ inline bool inFluid(Foam::scalar c)
 }
 
 /**
- * Check if the give LEVEL-SET value indicates the SOLID phase.
+ * Check if the given LEVEL-SET value indicates the SOLID phase.
  */
 inline bool inSolid(Foam::scalar c)
 {
@@ -411,8 +411,8 @@ inline bool inSolid(Foam::scalar c)
 }
 
 /**
- * Check if the give LEVEL-SET value is near the INTERFACE.
- * The criteria is set to 1/10 of the grid-spacing.
+ * Check if the given LEVEL-SET value is near the INTERFACE (zero-contour of the level-set function).
+ * The criteria is set to 1/10 of the Cartesian grid spacing.
  */
 inline bool nearSurf(Foam::scalar c)
 {
@@ -421,7 +421,7 @@ inline bool nearSurf(Foam::scalar c)
 
 /**
  * Check if the mesh cell is intersected by the iso-surface.
- * Based on its nodal level-set values.
+ * Based on its nodal LEVEL-SET values.
  */
 bool cellIsIntersected(const Foam::scalarList &v)
 {
@@ -434,6 +434,12 @@ bool cellIsIntersected(const Foam::scalarList &v)
     return false;
 }
 
+/**
+ * Classify the grid cell based on its LEVEL-SET values.
+ * @param c LEVEL-SET value at the cell centroid.
+ * @param v LEVEL-SET values on vertexes.
+ * @return Tag of the Ghost-cell Immersed-Boundary Method. (Fluid/Solid/Ghost)
+ */
 Foam::scalar cellNum(const Foam::scalar c, const Foam::scalarList &v)
 {
     if (inFluid(c))
@@ -462,38 +468,47 @@ Foam::scalar cellNum(const Foam::scalar c, const Foam::scalarList &v)
     }
 }
 
-void identifyIBCell(const Foam::fvMesh &mesh, Foam::volScalarField &marker)
+/**
+ * Update the IBM tag of all Cartesian grid cells.
+ * @param mesh The target Cartesian grid.
+ * @param phi_cell LEVEL-SET field on cell centroids.
+ * @param phi_pnt LEVEL-SET field on vertexes.
+ * @param marker Store the tag of each grid cell.
+ */
+void identifyIBCell(const Foam::fvMesh &mesh, const Foam::volScalarField &phi_cell, const Foam::pointScalarField &phi_pnt, Foam::volScalarField &marker)
 {
     int nSolid = 0, nGhost = 0, nFluid = 0;
     for (int i = 0; i < mesh.nCells(); i++)
     {
-        const auto &c = mesh.C()[i];
+        const auto &pL = mesh.cellPoints()[i];
 
-        const auto &cP = mesh.cellPoints()[i];
-        Foam::vectorList p(cP.size());
-        for (int j = 0; j < p.size(); j++)
-            p[j] = mesh.points()[cP[j]];
+        Foam::scalarList val(pL.size());
+        for (int j = 0; j < pL.size(); j++)
+        {
+            const auto pI = pL[j];
+            val[j] = phi_pnt[pI];
+        }
 
-        marker[i] = cellNum(p, c);
+        marker[i] = cellNum(phi_cell[i], val);
 
-        if (isEqual(marker[i], cSolid))
+        if (isSolidCell(marker[i]))
             ++nSolid;
-        else if (isEqual(marker[i], cFluid))
+        else if (isFluidCell(marker[i]))
             ++nFluid;
         else
             ++nGhost;
     }
 
-    // Ensure all solid cells not adjacent to fluid cells directly (through face) 
+    // Ensure all solid cells not adjacent to fluid cells directly (through face)
     for (int i = 0; i < mesh.nCells(); i++)
     {
-        if (isEqual(marker[i], cSolid))
+        if (isSolidCell(marker[i]))
         {
             const auto &cC = mesh.cellCells()[i];
             for (int j = 0; j < cC.size(); j++)
             {
                 const auto adjCI = cC[j];
-                if (isEqual(marker[adjCI], cFluid))
+                if (isFluidCell(marker[adjCI]))
                 {
                     marker[adjCI] = cGhost;
                     --nFluid;
@@ -508,14 +523,14 @@ void identifyIBCell(const Foam::fvMesh &mesh, Foam::volScalarField &marker)
         // Remove redundent ghost cells on fluid side (through face connection)
         for (int i = 0; i < mesh.nCells(); i++)
         {
-            if (isEqual(marker[i], cGhost))
+            if (isGhostCell(marker[i]))
             {
                 const auto &cC = mesh.cellCells()[i];
                 bool adjToSolid = false;
                 for (int j = 0; j < cC.size(); j++)
                 {
                     const auto adjCI = cC[j];
-                    if (isEqual(marker[adjCI], cSolid))
+                    if (isSolidCell(marker[adjCI]))
                     {
                         adjToSolid = true;
                         break;
@@ -536,14 +551,14 @@ void identifyIBCell(const Foam::fvMesh &mesh, Foam::volScalarField &marker)
         // Remove redundent ghost cells on solid side (through face connection)
         for (int i = 0; i < mesh.nCells(); i++)
         {
-            if (isEqual(marker[i], cGhost))
+            if (isGhostCell(marker[i]))
             {
                 const auto &cC = mesh.cellCells()[i];
                 bool adjToFluid = false;
                 for (int j = 0; j < cC.size(); j++)
                 {
                     const auto adjCI = cC[j];
-                    if (isEqual(marker[adjCI], cFluid))
+                    if (isFluidCell(marker[adjCI]))
                     {
                         adjToFluid = true;
                         break;
@@ -736,7 +751,7 @@ void ibInterp_Robin_Linear(const Foam::vector &p_src, const Foam::vector &n_src,
 }
 
 /**
- * Immersed-Bounary Method interpolation routines.
+ * Gas-phase properties.
  */
 void calc_gas_property(double T, double &lambda_, double &mu_, double &Cp_)
 {
@@ -765,7 +780,7 @@ int main(int argc, char *argv[])
         // Signed-distance
         for (int i = 0; i < mesh_gas.nCells(); i++)
         {
-            phi_gas[i] = distToSurf(mesh_gas.C()[i]);
+            phi_gas[i] = mesh_gas.C()[i].z() - plane_z;
         }
 
         // Properties
