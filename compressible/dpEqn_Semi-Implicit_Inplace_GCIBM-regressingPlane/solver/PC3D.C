@@ -110,7 +110,7 @@ inline bool isZero(double x)
 
 /**
  * Check the type of grid cells, based on the prescribed marker value.
- * These are felper functions to avoid explicit float-point comparsion.
+ * These are helper functions to avoid explicit float-point comparsion.
  */
 inline bool isFluidCell(double marker)
 {
@@ -425,10 +425,10 @@ inline bool nearSurf(Foam::scalar c)
  */
 bool cellIsIntersected(const Foam::scalarList &v)
 {
-    bool flag = pntInSolid(v[0]);
+    const bool flag = inSolid(v[0]);
     for (int i = 1; i < v.size(); i++)
     {
-        if (pntInSolid(v[i]) != flag)
+        if (inSolid(v[i]) != flag)
             return true;
     }
     return false;
@@ -436,7 +436,7 @@ bool cellIsIntersected(const Foam::scalarList &v)
 
 Foam::scalar cellNum(const Foam::scalar c, const Foam::scalarList &v)
 {
-    if (pntInFluid(c))
+    if (inFluid(c))
         return cFluid;
     else
     {
@@ -447,7 +447,7 @@ Foam::scalar cellNum(const Foam::scalar c, const Foam::scalarList &v)
             bool awayFromSruf = true;
             for (int i = 0; i < v.size(); i++)
             {
-                if (pntNearSurf(v[i]))
+                if (nearSurf(v[i]))
                 {
                     awayFromSruf = false;
                     break;
