@@ -1103,39 +1103,35 @@ int main(int argc, char *argv[])
         }
 
         /* Update the position of gas-solid interface */
-        if (0)
-		{
+        {
             // Extension velocity, Unit: m/s
-			for (int i = 0; i < pointMesh_solid.size(); i++)
-				F[i] = 2 * mm2m;
+            for (int i = 0; i < pointMesh_solid.size(); i++)
+                F[i] = 2 * mm2m;
 
             // Gradient of the Level-Set fucntion (pointScalarField -> volVectorField)
             for (int i = 0; i < mesh_solid.nCells(); i++)
             {
                 Foam::vector g(0.0, 0.0, 0.0);
-
-                const auto &curFaceList = mesh_solid.cells()[i];
-
-                for(int j = 0; j < curFaceList.size(); j++)
+                const auto &fL = mesh_solid.cells()[i];
+                for(int j = 0; j < fL.size(); j++)
                 {
-                    const auto curFaceIdx = curFaceList[j];
-                    const auto &curFace = mesh_solid.faces()[curFaceIdx];
+                    const auto fI = fL[j];
+                    const auto &f = mesh_solid.faces()[fI];
 
                     Foam::scalar val = 0.0;
-                    for(int k = 0; k < curFace.size(); k++)
+                    for(int k = 0; k < f.size(); k++)
                     {
-                        const auto curPointIdx = curFace[k];
-                        val += phi_solid[curPointIdx];
+                        const auto pI = f[k];
+                        val += phi_solid[pI];
                     }
-                    val /= curFace.size();
+                    val /= f.size();
 
-                    const Foam::vector &Sf = mesh_solid.Sf()[curFaceIdx];
-                    const Foam::vector d_Cf = mesh_solid.Cf()[curFaceIdx] - mesh_solid.C()[i];
-			        const Foam::vector Sn = (d_Cf & Sf) < 0.0 ? -Sf : Sf;
+                    const Foam::vector &Sf = mesh_solid.Sf()[fI];
+                    const Foam::vector d_Cf = mesh_solid.Cf()[fI] - mesh_solid.C()[i];
+                    const Foam::vector Sn = (d_Cf & Sf) < 0.0 ? -Sf : Sf;
 
                     g += val * Sn;
                 }
-                
                 grad_phi_solid[i] = g / mesh_solid.V()[i];
             }
 
@@ -1195,7 +1191,7 @@ int main(int argc, char *argv[])
                 const Foam::scalar H = F[i] * Foam::mag(grad_phi_upwind_solid[i]);
                 phi_solid[i] -= dt.value() * H;
             }
-		}
+        }
     }
 
     return 0;
