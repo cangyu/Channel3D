@@ -1146,8 +1146,19 @@ int main(int argc, char *argv[])
                 gradPhi_dst.y() = 0.0;
                 gradPhi_dst.z() = 0.0;
                 Foam::scalar gamma_sum = 0.0;
-                if (flag_pntOnPhyBdry[i] && !flag_pntOnParBdry[i])
+
+                for (int j = 0; j < nAdjCell; j++)
                 {
+                    const Foam::vector &C = adjC[j];
+                    const Foam::vector A = P - C;
+                    const Foam::scalar gamma = std::max(0.0, n&A/Foam::mag(A));
+                    gamma_sum += gamma;
+                    gradPhi_dst += gamma * gradPhi[j];
+                }
+                if (isZero(gamma_sum))
+                {
+                    gamma_sum = 0.0;
+                    gradPhi_dst *= gamma_sum;
                     for (int j = 0; j < nAdjCell; j++)
                     {
                         const Foam::vector &C = adjC[j];
@@ -1156,22 +1167,6 @@ int main(int argc, char *argv[])
                         gamma_sum += gamma;
                         gradPhi_dst += gamma * gradPhi[j];
                     }
-                }
-                else
-                {
-                    for (int j = 0; j < nAdjCell; j++)
-                    {
-                        const Foam::vector &C = adjC[j];
-                        const Foam::vector A = P - C;
-                        const Foam::scalar gamma = std::max(0.0, n&A/Foam::mag(A));
-                        gamma_sum += gamma;
-                        gradPhi_dst += gamma * gradPhi[j];
-                    }
-                }
-                if (isZero(gamma_sum))
-                {
-                    Foam::Perr << "Zero weight sum on point[" << i << "]" << Foam::endl;
-                    return 120;
                 }
                 gradPhi_dst /= gamma_sum;
             }
