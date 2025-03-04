@@ -782,7 +782,7 @@ int main(int argc, char *argv[])
         // Signed-distance
         for (int i = 0; i < pointMesh_gas.size(); i++)
         {
-            phi_gas[i] = pointMesh_gas[i].z() - plane_z;
+            phi_gas[i] = mesh_gas.points()[i].z() - plane_z;
         }
 
         // Properties
