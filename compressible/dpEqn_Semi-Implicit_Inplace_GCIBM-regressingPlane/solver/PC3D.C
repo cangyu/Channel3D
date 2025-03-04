@@ -303,7 +303,7 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
  */
 int collectData_pointCell(const Foam::pointMesh &pointMesh, const Foam::boolList &pntCoupledFlag, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
 {
-    const Foam::polyMesh &ployMesh = pointMesh.mesh();
+    const Foam::polyMesh &polyMesh = pointMesh.mesh();
     const Foam::pointBoundaryMesh &bMesh = pointMesh.boundary();
     const Foam::globalMeshData &globalData = pointMesh.globalData();
 
