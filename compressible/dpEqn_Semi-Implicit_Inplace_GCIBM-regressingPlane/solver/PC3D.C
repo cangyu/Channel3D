@@ -301,44 +301,17 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
  * Collect the data on cells surrounding each point.
  * Points on parallel boundaries are handled.
  */
-int collectData_pointCell(const Foam::polyMesh &polyMesh, const Foam::pointMesh &pointMesh, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
+int collectData_pointCell(const Foam::pointMesh &pointMesh, const Foam::boolList &pntCoupledFlag, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
 {
+    const Foam::polyMesh &ployMesh = pointMesh.mesh();
     const Foam::pointBoundaryMesh &bMesh = pointMesh.boundary();
     const Foam::globalMeshData &globalData = pointMesh.globalData();
+
     const Foam::indirectPrimitivePatch &coupledPatch = globalData.coupledPatch();
     const Foam::globalIndexAndTransform &transforms = globalData.globalTransforms();
     const Foam::labelList &boundaryCells = globalData.boundaryCells();
     const Foam::mapDistribute &globalPointBoundaryCellsMap = globalData.globalPointBoundaryCellsMap();
     const Foam::labelListList &slaves = globalData.globalPointBoundaryCells();
-    
-    /* Count and mark points on parallel boundary */
-    // TODO: only to be done once, move to the init stage of the main program
-    Foam::boolList pntCoupledFlag(pointMesh.size(), false);
-    Foam::boolList pntVistedFlag(pointMesh.size(), false);
-    int nParPnt = 0;
-    for (int i = 0; i < bMesh.size(); i++)
-    {
-        if (!bMesh[i].coupled())
-            continue;
-
-        const Foam::labelList &pL = bMesh[i].meshPoints();
-        for (int j = 0; j < pL.size(); j++)
-        {
-            const auto pI = pL[j];
-            if (pntVistedFlag[pI])
-                continue;
-
-            pntCoupledFlag[pI] = true;
-            pntVistedFlag[pI] = true;
-            ++nParPnt;
-        }
-    }
-
-    if (nParPnt != slaves.size())
-    {
-        Foam::Perr << "Inconsistent number of points on parallel boundaries: " << nParPnt << "(My) / " << slaves.size() << "(globalData)" << Foam::endl;
-        return 1;
-    }
 
     /* Collect data for points inside the domain and on physical boundaries */
     dst.resize(pointMesh.size());
@@ -374,7 +347,7 @@ int collectData_pointCell(const Foam::polyMesh &polyMesh, const Foam::pointMesh 
         const Foam::labelList &pointCells = slaves[i];
         const Foam::label pI = coupledPatch.meshPoints()[i];
 
-        if (pntCoupledFlag[pI] && pntVistedFlag[pI] && dst[pI].empty())
+        if (pntCoupledFlag[pI] && dst[pI].empty())
         {
             dst[pI].resize(pointCells.size());
             for (int j = 0; j < pointCells.size(); j++)
@@ -384,7 +357,6 @@ int collectData_pointCell(const Foam::polyMesh &polyMesh, const Foam::pointMesh 
         {
             Foam::Perr << "Problem detected on parallel-boundary point " << i << "(" << pI << "): "
                        << "\tpntCoupledFlag=" << pntCoupledFlag[pI] << ", "
-                       << "\tpntVisitedFlag=" << pntVistedFlag[pI] << ", "
                        << "\tempty=" << dst[pI].empty()
                        << Foam::endl;
             return 2;
@@ -847,7 +819,7 @@ int main(int argc, char *argv[])
     addressing.collectData(cIbMarker, sten_ib);
 
     Foam::List<Foam::vectorList> pntAdjCentroid;
-    collectData_pointCell(mesh_solid, pointMesh_solid, mesh_solid.C(), pntAdjCentroid);
+    collectData_pointCell(pointMesh_solid, flag_pntOnParBdry_solid, mesh_solid.C(), pntAdjCentroid);
 
     while(runTime.loop())
     {
@@ -1137,7 +1109,7 @@ int main(int argc, char *argv[])
 
             // Collect data on surrounding cells for each point
             Foam::List<Foam::vectorList> p2C_gradPhi;
-            collectData_pointCell(mesh_solid, pointMesh_solid, grad_phi_solid, p2C_gradPhi);
+            collectData_pointCell(pointMesh_solid, flag_pntOnParBdry_solid, grad_phi_solid, p2C_gradPhi);
 
             // Upwind reconstruction of the gradient on points (centroids -> points)
             for (int i = 0; i < pointMesh_solid.size(); i++)
@@ -1174,6 +1146,7 @@ int main(int argc, char *argv[])
                 gradPhi_dst.y() = 0.0;
                 gradPhi_dst.z() = 0.0;
                 Foam::scalar gamma_sum = 0.0;
+
                 for (int j = 0; j < nAdjCell; j++)
                 {
                     const Foam::vector &C = adjC[j];
