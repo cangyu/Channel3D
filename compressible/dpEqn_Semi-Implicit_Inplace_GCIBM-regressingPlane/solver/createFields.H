@@ -60,10 +60,10 @@ Foam::volScalarField lambda // Conductivity, Unit: W/m/K
     "zeroGradient"
 );
 
-Foam::volScalarField phi_gas // Level-Set function defined as signed-distance, Unit: m
+Foam::pointScalarField phi_gas // Level-Set function defined as signed-distance, Unit: m
 (
     Foam::IOobject("phi", runTime.timeName(), mesh_gas, Foam::IOobject::NO_READ, Foam::IOobject::AUTO_WRITE),
-    mesh_gas,
+    pointMesh_gas,
     Foam::dimensionedScalar(Foam::dimLength, 0.0)
 );
 

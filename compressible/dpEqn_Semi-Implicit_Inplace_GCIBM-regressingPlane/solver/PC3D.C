@@ -471,11 +471,10 @@ Foam::scalar cellNum(const Foam::scalar c, const Foam::scalarList &v)
 /**
  * Update the IBM tag of all Cartesian grid cells.
  * @param mesh The target Cartesian grid.
- * @param phi_cell LEVEL-SET field on cell centroids.
- * @param phi_pnt LEVEL-SET field on vertexes.
+ * @param phi LEVEL-SET field on vertexes.
  * @param marker Store the tag of each grid cell.
  */
-void identifyIBCell(const Foam::fvMesh &mesh, const Foam::volScalarField &phi_cell, const Foam::pointScalarField &phi_pnt, Foam::volScalarField &marker)
+void identifyIBCell(const Foam::fvMesh &mesh, const Foam::pointScalarField &phi, Foam::volScalarField &marker)
 {
     int nSolid = 0, nGhost = 0, nFluid = 0;
     for (int i = 0; i < mesh.nCells(); i++)
@@ -483,13 +482,16 @@ void identifyIBCell(const Foam::fvMesh &mesh, const Foam::volScalarField &phi_ce
         const auto &pL = mesh.cellPoints()[i];
 
         Foam::scalarList val(pL.size());
+        Foam::scalar val_mean = 0.0;
         for (int j = 0; j < pL.size(); j++)
         {
             const auto pI = pL[j];
-            val[j] = phi_pnt[pI];
+            val[j] = phi[pI];
+            val_mean += val[j];
         }
+        val_mean /= pL.size();
 
-        marker[i] = cellNum(phi_cell[i], val);
+        marker[i] = cellNum(val_mean, val);
 
         if (isSolidCell(marker[i]))
             ++nSolid;
@@ -778,9 +780,9 @@ int main(int argc, char *argv[])
         rho.correctBoundaryConditions();
 
         // Signed-distance
-        for (int i = 0; i < mesh_gas.nCells(); i++)
+        for (int i = 0; i < pointMesh_gas.size(); i++)
         {
-            phi_gas[i] = mesh_gas.C()[i].z() - plane_z;
+            phi_gas[i] = pointMesh_gas[i].z() - plane_z;
         }
 
         // Properties
@@ -830,7 +832,7 @@ int main(int argc, char *argv[])
     setBdryVal(mesh_gas, rho, U, rhoUSn);
 
     /* Classify mesh cells */
-    identifyIBCell(mesh_gas, cIbMarker);
+    identifyIBCell(mesh_gas, phi_gas, cIbMarker);
     for (int i = 0; i < mesh_gas.nCells(); i++)
         cIbMask[i] = cIbMarker[i] > 0 ? 1.0 : 0.0;
 
@@ -866,7 +868,7 @@ int main(int argc, char *argv[])
             // Interpolate data
             for (int i = 0; i < mesh_gas.nCells(); i++)
             {
-                if (isEqual(cIbMarker[i], cGhost))
+                if (isGhostCell(cIbMarker[i]))
                 {
                     // Position and normal of the Boundary Intersection point
                     const Foam::vector p_BI(mesh_gas.C()[i].x(), mesh_gas.C()[i].y(), plane_z);
