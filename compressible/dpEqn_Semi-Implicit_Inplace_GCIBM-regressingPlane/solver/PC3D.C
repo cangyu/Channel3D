@@ -87,7 +87,7 @@ const Foam::scalar T0 = 300.0;                   // Initial temperature
 
 /* Plane param */
 const Foam::scalar plane_z = 0.25*mm2m;          // Vertical position at initial
-const Foam::scalar plane_T = 800.0;              // Temperature
+const Foam::scalar plane_T = 300.0;              // Temperature
 
 /**
  * Check if two scalars are equal in the float-point-number sense.
@@ -913,7 +913,7 @@ int main(int argc, char *argv[])
         /* Update gas-phase by semi-implicit iteration */
         bool converged = false;
         int m = 0;
-        while(++m <= 3)
+        while(++m <= 5)
         {
             Foam::Info << "m=" << m << Foam::endl;
 
@@ -1103,6 +1103,7 @@ int main(int argc, char *argv[])
         }
 
         /* Update the position of gas-solid interface */
+        if (0)
 		{
             // Extension velocity, Unit: m/s
 			for (int i = 0; i < pointMesh_solid.size(); i++)
