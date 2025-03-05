@@ -304,7 +304,6 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
 int collectData_pointCell(const Foam::pointMesh &pointMesh, const Foam::boolList &pntCoupledFlag, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
 {
     const Foam::polyMesh &polyMesh = pointMesh.mesh();
-    const Foam::pointBoundaryMesh &bMesh = pointMesh.boundary();
     const Foam::globalMeshData &globalData = pointMesh.globalData();
 
     const Foam::indirectPrimitivePatch &coupledPatch = globalData.coupledPatch();
@@ -734,6 +733,7 @@ void calc_gas_property(double T, double &lambda_, double &mu_, double &Cp_)
     mu_ = Pr * lambda_ / Cp_;                    // Unit: kg/m/s
 }
 
+/* Main program */
 int main(int argc, char *argv[])
 {
     #include "setRootCase.H"
@@ -1126,6 +1126,15 @@ int main(int argc, char *argv[])
                     return 110;
                 }
                 const int nAdjCell = adjC.size();
+                if (nAdjCell < mesh_solid.pointCells()[i].size() || nAdjCell == 0)
+                {
+                    Foam::Perr << "point[" << i << "]: nAdjCell=" << nAdjCell
+                               << ", pointCells().size()=" << mesh_solid.pointCells()[i].size()
+                               << ", flag_pntOnBdry=" << flag_pntOnBdry_solid[i]
+                               << ", flag_pntOnPhyBdry=" << flag_pntOnPhyBdry_solid[i]
+                               << ", flag_pntOnParBdry=" << flag_pntOnParBdry_solid[i]
+                               << Foam::endl;
+                }
 
                 // Approximate normal direction
                 Foam::vector n(0.0, 0.0, 0.0);
@@ -1146,7 +1155,6 @@ int main(int argc, char *argv[])
                 gradPhi_dst.y() = 0.0;
                 gradPhi_dst.z() = 0.0;
                 Foam::scalar gamma_sum = 0.0;
-
                 for (int j = 0; j < nAdjCell; j++)
                 {
                     const Foam::vector &C = adjC[j];

@@ -1,4 +1,4 @@
-Foam::Info << "Create field variables of the gas-phase" << Foam::nl << Foam::endl;
+Foam::Info << "\nCreate field variables of the gas-phase" << Foam::endl;
 
 Foam::volScalarField rho // Density@(n), Unit: kg/m^3
 (
@@ -129,7 +129,7 @@ Foam::autoPtr<Foam::compressible::momentumTransportModel> turbulence
 );
 turbulence->validate();
 
-Foam::Info << "Create field variables of the solid-phase" << Foam::nl << Foam::endl;
+Foam::Info << "\nCreate field variables of the solid-phase" << Foam::endl;
 
 Foam::volScalarField rho_solid // Density, Unit: kg/m^3
 (
