@@ -316,8 +316,8 @@ int collectData_pointCell(const Foam::pointMesh &pointMesh, const Foam::boolList
     dst.resize(pointMesh.size());
     for (int i = 0; i < pointMesh.size(); i++)
     {
-        if (pntCoupledFlag[i])
-            continue;
+        // if (pntCoupledFlag[i])
+        //     continue;
 
         const Foam::labelList &cL = polyMesh.pointCells()[i];
         dst[i].resize(cL.size());
@@ -346,20 +346,26 @@ int collectData_pointCell(const Foam::pointMesh &pointMesh, const Foam::boolList
         const Foam::labelList &pointCells = slaves[i];
         const Foam::label pI = coupledPatch.meshPoints()[i];
 
-        if (pntCoupledFlag[pI] && dst[pI].empty())
+        if (dst[pI].size() != pointCells.size())
         {
+            Foam::Pout << "point[" << pI << "]: " << dst[pI].size() << "(local)/" << pointCells.size() << "(global)" << Foam::endl;
             dst[pI].resize(pointCells.size());
-            for (int j = 0; j < pointCells.size(); j++)
-                dst[pI][j] = bData[pointCells[j]];
         }
-        else
-        {
-            Foam::Perr << "Problem detected on parallel-boundary point " << i << "(" << pI << "): "
-                       << "\tpntCoupledFlag=" << pntCoupledFlag[pI] << ", "
-                       << "\tempty=" << dst[pI].empty()
-                       << Foam::endl;
-            return 2;
-        }
+        for (int j = 0; j < pointCells.size(); j++)
+            dst[pI][j] = bData[pointCells[j]];
+
+        // if (pntCoupledFlag[pI] && dst[pI].empty())
+        // {
+            
+        // }
+        // else
+        // {
+        //     Foam::Perr << "Problem detected on parallel-boundary point " << i << "(" << pI << "): "
+        //                << "\tpntCoupledFlag=" << pntCoupledFlag[pI] << ", "
+        //                << "\tempty=" << dst[pI].empty()
+        //                << Foam::endl;
+        //     return 2;
+        // }
     }
 
     return 0;
