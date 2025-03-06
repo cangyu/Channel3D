@@ -301,7 +301,7 @@ void diagnose(const Foam::fvMesh &mesh, const Foam::volScalarField &src, const F
  * Collect the data on cells surrounding each point.
  * Points on parallel boundaries are handled.
  */
-int collectData_pointCell(const Foam::pointMesh &pointMesh, const Foam::boolList &pntCoupledFlag, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
+int collectData_pointCell(const Foam::pointMesh &pointMesh, const Foam::volVectorField &src, Foam::List<Foam::vectorList> &dst)
 {
     const Foam::polyMesh &polyMesh = pointMesh.mesh();
     const Foam::globalMeshData &globalData = pointMesh.globalData();
@@ -312,13 +312,10 @@ int collectData_pointCell(const Foam::pointMesh &pointMesh, const Foam::boolList
     const Foam::mapDistribute &globalPointBoundaryCellsMap = globalData.globalPointBoundaryCellsMap();
     const Foam::labelListList &slaves = globalData.globalPointBoundaryCells();
 
-    /* Collect data for points inside the domain and on physical boundaries */
+    /* Collect data on local processor */
     dst.resize(pointMesh.size());
     for (int i = 0; i < pointMesh.size(); i++)
     {
-        // if (pntCoupledFlag[i])
-        //     continue;
-
         const Foam::labelList &cL = polyMesh.pointCells()[i];
         dst[i].resize(cL.size());
         for (int j = 0; j < cL.size(); j++)
@@ -344,28 +341,15 @@ int collectData_pointCell(const Foam::pointMesh &pointMesh, const Foam::boolList
     for (int i = 0; i < slaves.size(); i++)
     {
         const Foam::labelList &pointCells = slaves[i];
-        const Foam::label pI = coupledPatch.meshPoints()[i];
+        if (pointCells.size() == 0)
+            continue;
 
+        const Foam::label pI = coupledPatch.meshPoints()[i];
         if (dst[pI].size() != pointCells.size())
-        {
-            Foam::Pout << "point[" << pI << "]: " << dst[pI].size() << "(local)/" << pointCells.size() << "(global)" << Foam::endl;
             dst[pI].resize(pointCells.size());
-        }
+
         for (int j = 0; j < pointCells.size(); j++)
             dst[pI][j] = bData[pointCells[j]];
-
-        // if (pntCoupledFlag[pI] && dst[pI].empty())
-        // {
-            
-        // }
-        // else
-        // {
-        //     Foam::Perr << "Problem detected on parallel-boundary point " << i << "(" << pI << "): "
-        //                << "\tpntCoupledFlag=" << pntCoupledFlag[pI] << ", "
-        //                << "\tempty=" << dst[pI].empty()
-        //                << Foam::endl;
-        //     return 2;
-        // }
     }
 
     return 0;
@@ -797,7 +781,7 @@ int main(int argc, char *argv[])
         lambda_solid.correctBoundaryConditions(); 
 
         for (int i = 0; i < pointMesh_solid.size(); i++)
-            phi_solid[i] = pointMesh_solid.mesh().points()[i].z() - 0.95*L;
+            phi_solid[i] = pointMesh_solid.mesh().points()[i].z() - plane_z;
         phi_solid.correctBoundaryConditions();
     }
 
@@ -825,7 +809,7 @@ int main(int argc, char *argv[])
     addressing.collectData(cIbMarker, sten_ib);
 
     Foam::List<Foam::vectorList> pntAdjCentroid;
-    collectData_pointCell(pointMesh_solid, flag_pntOnParBdry_solid, mesh_solid.C(), pntAdjCentroid);
+    collectData_pointCell(pointMesh_solid, mesh_solid.C(), pntAdjCentroid);
 
     while(runTime.loop())
     {
@@ -1084,7 +1068,7 @@ int main(int argc, char *argv[])
         {
             // Extension velocity, Unit: m/s
             for (int i = 0; i < pointMesh_solid.size(); i++)
-                F[i] = 2 * mm2m;
+                F[i] = -2000 * mm2m;
 
             // Gradient of the Level-Set fucntion (pointScalarField -> volVectorField)
             for (int i = 0; i < mesh_solid.nCells(); i++)
@@ -1115,7 +1099,7 @@ int main(int argc, char *argv[])
 
             // Collect data on surrounding cells for each point
             Foam::List<Foam::vectorList> p2C_gradPhi;
-            collectData_pointCell(pointMesh_solid, flag_pntOnParBdry_solid, grad_phi_solid, p2C_gradPhi);
+            collectData_pointCell(pointMesh_solid, grad_phi_solid, p2C_gradPhi);
 
             // Upwind reconstruction of the gradient on points (centroids -> points)
             for (int i = 0; i < pointMesh_solid.size(); i++)
@@ -1191,6 +1175,12 @@ int main(int argc, char *argv[])
                 const Foam::scalar H = F[i] * Foam::mag(grad_phi_upwind_solid[i]);
                 phi_solid[i] -= dt.value() * H;
             }
+
+            // Check range
+            {
+                Foam::Info << "phi: " << Foam::gMin(phi_solid) << "~" << Foam::gMax(phi_solid) << Foam::endl;
+            }
+
         }
     }
 
