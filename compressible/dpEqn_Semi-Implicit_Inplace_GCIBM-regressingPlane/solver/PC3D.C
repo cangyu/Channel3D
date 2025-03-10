@@ -322,35 +322,43 @@ int collectData_pointCell(const Foam::pointMesh &pointMesh, const Foam::volVecto
             dst[i][j] = src[cL[j]];
     }
 
-    /* Collect data for points on parallel boundaries */
-    // Record local data
+    /* Collect data on parallel boundary cells */
     Foam::vectorList bData(globalPointBoundaryCellsMap.constructSize());
+    
+    // Record data
     for (int i = 0; i < boundaryCells.size(); i++)
-    {
-        const auto cI = boundaryCells[i];
-        bData[i] = src[cI];
-    }
-    // Exchange data
+        bData[i] = src[boundaryCells[i]];
+
+    // Pull data from slaves to master
     globalPointBoundaryCellsMap.distribute
     (
         transforms,
         bData,
-        Foam::mapDistribute::transformPosition()
+        Foam::mapDistribute::transform()
     );
-    // Store data in order
+
+    // Store data into destination with corresponding point index
     for (int i = 0; i < slaves.size(); i++)
     {
-        const Foam::labelList &pointCells = slaves[i];
-        if (pointCells.size() == 0)
+        const Foam::labelList &cL = slaves[i];
+        if (cL.size() == 0) // is slave, skip
             continue;
 
         const Foam::label pI = coupledPatch.meshPoints()[i];
-        if (dst[pI].size() != pointCells.size())
-            dst[pI].resize(pointCells.size());
+        if (dst[pI].size() != cL.size())
+            dst[pI].resize(cL.size());
 
-        for (int j = 0; j < pointCells.size(); j++)
-            dst[pI][j] = bData[pointCells[j]];
+        for (int j = 0; j < cL.size(); j++)
+            dst[pI][j] = bData[cL[j]];
     }
+
+    /* Sync */
+    globalData.syncPointData
+    (
+        dst,
+        Foam::nopEqOp<Foam::vectorList>(),
+        Foam::mapDistribute::transform()
+    );
 
     return 0;
 }
@@ -1118,13 +1126,9 @@ int main(int argc, char *argv[])
                 const int nAdjCell = adjC.size();
                 if (nAdjCell < mesh_solid.pointCells()[i].size() || nAdjCell == 0)
                 {
-                    Foam::Perr << "point[" << i << "]: nAdjCell=" << nAdjCell
-                               << ", pointCells().size()=" << mesh_solid.pointCells()[i].size()
-                               << ", flag_pntOnBdry=" << flag_pntOnBdry_solid[i]
-                               << ", flag_pntOnPhyBdry=" << flag_pntOnPhyBdry_solid[i]
-                               << ", flag_pntOnParBdry=" << flag_pntOnParBdry_solid[i]
-                               << Foam::endl;
-                }
+                    Foam::Perr << "point[" << i << "]: nAdjCell=" << nAdjCell << ", pointCells().size()=" << mesh_solid.pointCells()[i].size() << Foam::endl;
+		    return 120;
+		}
 
                 // Approximate normal direction
                 Foam::vector n(0.0, 0.0, 0.0);
@@ -1178,7 +1182,7 @@ int main(int argc, char *argv[])
 
             // Check range
             {
-                Foam::Info << "phi: " << Foam::gMin(phi_solid) << "~" << Foam::gMax(phi_solid) << Foam::endl;
+                Foam::Info << "phi/h: " << Foam::gMin(phi_solid)/h << "~" << Foam::gMax(phi_solid)/h << Foam::endl;
             }
 
         }
